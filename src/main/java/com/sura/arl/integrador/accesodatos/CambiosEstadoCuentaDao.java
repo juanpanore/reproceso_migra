@@ -84,7 +84,7 @@ public class CambiosEstadoCuentaDao extends AbstractDAO {
         params.put("inicio",inicio);
         params.put("fin",fin);
         //String sql = queriesDAO.getQuery("consultar.cambios.estado.cuenta");
-        String sql = " SELECT * FROM ( SELECT CEC.NMCONSECUTIVO, CEC.NMPOLIZA, CEC.DNI, CEC.DSPARAMETROS , ROW_NUMBER() OVER (ORDER BY NMCONSECUTIVO) Row_Num FROM TCPG_INTEGRA_ESTADO_CTA CEC WHERE CDESTADO = 'ENCOLA2') WHERE Row_Num BETWEEN :inicio and :fin";
+        String sql = " SELECT * FROM ( SELECT CEC.NMCONSECUTIVO, CEC.NMPOLIZA, CEC.DNI, CEC.DSPARAMETROS , ROW_NUMBER() OVER (ORDER BY NMCONSECUTIVO) Row_Num FROM TCPG_INTEGRA_ESTADO_CTA CEC WHERE CDESTADO = 'ENCOLA') WHERE Row_Num BETWEEN :inicio and :fin";
 
         return getJdbcTemplate().query(sql, params, (ResultSet rs, int index) -> {
 
