@@ -1,0 +1,215 @@
+apply plugin: 'java'
+apply plugin: "jacoco"
+apply plugin: 'com.github.johnrengelman.shadow'
+apply plugin: 'eclipse'
+apply plugin: 'docker'
+
+def libs = LIBS
+
+// Encoding con el que se compila
+[ compileJava, compileTestJava ]*.options*.encoding = 'ISO-8859-1'
+
+sourceCompatibility = 1.8
+targetCompatibility = 1.8
+
+buildscript {
+  
+  repositories {
+    maven {
+      url "https://plugins.gradle.org/m2/"
+    }   
+    
+    jcenter()
+  }
+  
+  dependencies {    
+    classpath "com.github.jengelman.gradle.plugins:shadow:1.2.4"
+    classpath 'de.sebastianboegl.gradle.plugins:shadow-log4j-transformer:1.0.1'
+    classpath('se.transmode.gradle:gradle-docker:1.2')
+  }
+}
+
+repositories {
+    mavenCentral()
+    maven {
+        credentials {
+            username 'artifactory'
+            password 'APhUNND62ueYkqmndp3TPc5AfM'
+        }
+        url 'http://srintcp01.suramericana.com.co:8081/artifactory/sura-gradle'
+    }
+    maven {
+        url 'http://srintcp01.suramericana.com.co:8081/artifactory/sura-share'
+    }
+    maven {
+        url 'http://repo.spring.io/plugins-release/'
+    }   
+    
+     
+}
+
+if (hasProperty('ambienteJenkins') && ambienteJenkins == 'sura') {
+		// Librerias remotas
+		libs = LIBS_REMOTO
+			
+		// Obtiene informacion del SVN para utilizarla en el despliegue versionado desde Jenkins
+		new ByteArrayOutputStream().withStream { os ->
+				def result = exec {
+			    executable = 'svn'
+			    args = ['info', '-r', 'HEAD', '../']
+			    standardOutput = os
+			}
+		    def outputAsString = os.toString()
+		    def matchLastChangedRev = outputAsString =~ /Last Changed Rev: (\d+)/
+		    def matchURL= outputAsString =~ /URL: (.+)/
+		    project.ext.set('svnRevision', matchLastChangedRev[0][1])
+		    project.ext.set('svnURL', matchURL[0][1]);
+		}
+	} else {
+		project.ext.set('svnRevision', '0')
+		project.ext.set('svnURL', '');
+}
+
+dependencies {
+
+    compile 'com.typesafe.akka:akka-actor_2.11:2.5.10'	
+	compile 'com.typesafe.akka:akka-remote_2.11:2.5.10'    
+    compile 'com.typesafe.akka:akka-cluster-tools_2.11:2.5.10'
+    compile 'com.typesafe.akka:akka-stream_2.11:2.5.10'
+    compile 'com.lightbend.akka:akka-stream-alpakka-amqp_2.11:0.15.1'
+    compile 'com.typesafe.akka:akka-distributed-data_2.11:2.5.10'
+    compile 'com.github.romix.akka:akka-kryo-serialization_2.11:0.5.0'
+    compile 'com.lightbend.akka.management:akka-management-cluster-bootstrap_2.11:0.9.0'
+    compile 'com.lightbend.akka.discovery:akka-discovery-dns_2.11:0.9.0'       
+    
+    compile group: 'org.ehcache', name: 'ehcache', version: '3.1.0'
+
+	compile 'org.springframework:spring-context:4.2.4.RELEASE'
+	compile 'org.springframework:spring-context-support:4.2.4.RELEASE'	
+	compile 'org.springframework:spring-jdbc:4.2.4.RELEASE'		
+	compile 'org.springframework:spring-tx:4.2.4.RELEASE'	
+    
+	compile 'com.google.code.gson:gson:2.5'
+	compile 'com.zaxxer:HikariCP:2.4.3' 		
+	compile 'org.slf4j:slf4j-api:1.7.12'
+	compile 'org.slf4j:jcl-over-slf4j:1.7.12'
+	compile 'ch.qos.logback:logback-core:1.1.3'
+	compile 'ch.qos.logback:logback-classic:1.1.3'
+	compile 'com.typesafe.akka:akka-slf4j_2.11:2.5.3'
+	compile 'commons-validator:commons-validator:1.4.0'
+	compile 'net.sf.supercsv:super-csv:2.4.0'
+	compile 'commons-net:commons-net:3.6'
+	
+	compile files(libs + '/librerias/ojdbc/ojdbc6.jar')
+		
+    testCompile 'junit:junit:4.12' 
+    testCompile 'org.mockito:mockito-core:1.10.19'
+    testCompile 'com.typesafe.akka:akka-testkit_2.11:2.5.9'
+
+    compile group: 'org.jdom', name: 'jdom', version: '1.1.3'
+    // Dependencias SEUS, PUBS y SWB
+    compile group: 'commons-io', name: 'commons-io', version: '2.4'
+    compile group: 'commons-codec', name: 'commons-codec', version: '1.10'
+    compile group: 'commons-collections', name: 'commons-collections', version: '3.2.1'
+    compile (group: 'org.owasp.esapi', name: 'esapi', version: '2.0.1') {
+        exclude module: 'log4j'
+    }
+    compile (group: 'ca.juliusdavies', name: 'not-yet-commons-ssl', version: '0.3.9') {
+        exclude module: 'log4j'
+    }
+    compile group: 'org.opensaml', name: 'opensaml', version: '2.6.1'
+    compile group: 'org.opensaml', name: 'openws', version: '1.5.1'
+    compile group: 'org.opensaml', name: 'xmltooling', version: '1.4.4'
+    compile group: 'joda-time', name: 'joda-time', version: '2.2'
+    compile group: 'org.apache.velocity', name: 'velocity', version: '1.7'
+    compile fileTree(dir: libs + '/librerias/ssosura/1.0/', include: '*.jar', exclude: ['slf4j-api-1.7.5.jar', 'log4j-over-slf4j-1.7.5.jar'])
+    compile fileTree(dir: libs + '/librerias/swb2/', include: 'swb.jar')
+    // Fin dependencias SEUS, PUBS y SWB
+
+    // Dependencias SuraLogger
+    compile fileTree(dir: libs + '/extLibs/jersey1.9-wls/', include: '*.jar')
+    compile group: 'com.googlecode.json-simple', name: 'json-simple', version: '1.1.1'
+    compile group: 'com.lmax', name: 'disruptor', version:'3.3.2'
+    compile group: 'org.apache.logging.log4j', name: 'log4j-api', version:'2.3'
+    compile group: 'org.apache.logging.log4j', name: 'log4j-core', version:'2.3'
+    compile group: 'org.apache.logging.log4j', name: 'log4j-web', version:'2.3'
+    compile group: 'co.com.sura.swb', name: 'SuraLoggerApi', version: '1.0.0'
+    compile group: 'co.com.sura.swb', name: 'SuraLoggerConfigurationRecordType', version: '1.0.0'
+    compile group: 'co.com.sura.swb', name: 'SuraLoggerWebListener', version: '1.0.0'
+    compile group: 'com.splunk.logging', name: 'splunk-library-javalogging', version: '1.5.2'
+    // Fin dependencias SuraLogger
+	  	
+}
+
+configurations {
+	// Se excluye esta libreria como implementacion de logging para ser remplazada por jcl-over-slf4j
+	compile.exclude module: 'commons-logging'
+}
+
+shadowJar {
+	baseName = 'procesador-reproceso'	
+	classifier = null
+	
+  	transform(com.github.jengelman.gradle.plugins.shadow.transformers.AppendingTransformer) {
+    	resource = 'reference.conf'
+  	}
+  	transform(de.sebastianboegl.gradle.plugins.shadow.transformers.Log4j2PluginsFileTransformer)
+}
+
+jacoco {   
+    reportsDir = file("$buildDir/reporte-jacoco")
+}
+
+test {
+	jacoco {
+		append = true
+		destinationFile = file("../procesador-reproceso/build/jacoco/jacoco.exec")
+	}
+}
+
+task copyRes {
+    doLast {
+    	['src/main/java', 'src/main/resources'].each { src ->
+        	copy {
+        		from src
+       			into 'build/classes'
+       			include('**/*.txt', '**/*.xml', '**/*.properties')
+        	}
+    	}
+    }
+}
+
+jar {
+	archiveName = "procesador-reproceso.jar"
+    manifest {
+    	def dateTime = new Date() 
+		attributes(
+			"Main-Class":"com.sura.arl.reproceso.Aplicacion",
+			"Implementation-Title": "procesador-reproceso",			
+			"Implementation-Version": "1." + project.svnRevision,
+		    "Creation-Date": dateTime.toTimestamp().toString(),
+		    "SVN-Revision-Number": project.svnRevision,
+		    "SVN-URL": project.svnURL		    
+		)
+    }
+    
+    from { configurations.compile.collect { it.isDirectory() ? it : zipTree(it) } }   
+    
+}
+
+task buildDocker(type: Docker, dependsOn: shadowJar) {
+  applicationName = jar.baseName
+  dockerfile = file('Dockerfile')
+  doFirst {
+    copy {
+      from jar
+      into "${stageDir}/build/libs"
+    }     
+  }
+}
+
+compileJava.dependsOn(clean)
+test.dependsOn(copyRes)
+jacocoTestReport.dependsOn(test)
+//jar.dependsOn(jacocoTestReport)
+shadowJar.dependsOn(compileJava, jacocoTestReport)
