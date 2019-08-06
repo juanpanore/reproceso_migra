@@ -112,6 +112,7 @@ public class GestionDeCambiosServicio {
                     }
                 });
                 latch.await();
+                TimeUnit.SECONDS.sleep(60);
             } catch (InterruptedException e) {
                 LOG.error(e.getMessage(), e);
             }
