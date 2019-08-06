@@ -82,7 +82,8 @@ public class RecalculoEstadoCuentaServicio {
         // novedad,
         // entoncs se debe volver a generar la esperada especifica y volver a reprocesar
         if ((novedadesAusentismo.size() > 0 || novedadesLaboradas.size() > 0)
-                && "S".equals(estadoCuentaActual.getExistePago())) {
+                && "S".equals(estadoCuentaActual.getExistePago())
+                && numeroFormulario.isPresent()) {
                 LOG.info("Se detiene reproceso, ya tiene reproceso realizado, se envia a integrador para volver a generar -> dni:{}, poliza:{}, periodo:{}, tipoAfil:{}, tipoCot:{}, formulario:{}",
                 dni, poliza, periodo, afiliado.getTipoAfiliado(), afiliado.getTipoCotizante(),
                 numeroFormulario.orElse(-1L));
