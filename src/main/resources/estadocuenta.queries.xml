@@ -1,0 +1,946 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE properties SYSTEM "http://java.sun.com/dtd/properties.dtd">
+
+<properties>
+
+    <entry key="consulta.cobertura.empresas">
+    <![CDATA[    
+       SELECT
+            CP.NPOLIZA, 
+            CDMOTIVO_DESAFILIA motivoDesafiliacion,
+            :periodoCotizacion NMPERIODO_COTIZACION
+       FROM
+            T094_CUERPOLIZA CP
+        WHERE
+            CP.FEALTA <= LAST_DAY( TO_DATE(:periodoCotizacion, 'YYYYMM' ))
+            AND CP.FEBAJA >= TO_DATE(:periodoCotizacion, 'YYYYMM' )
+            AND CP.FEALTA <> CP.FEBAJA
+            AND CP.NPOLIZA IN ('094104299')
+            --AND CP.NPOLIZA IN ('094002275')
+            --AND CP.NPOLIZA IN ('094160004', '094000082')
+            --AND CP.NPOLIZA IN ('094230764','094135236','094019832','094230444','094001241','094462292','094202210', '094007984')
+        ORDER BY
+            COALESCE(
+                SNAFILIADA,
+                'S'
+            ) DESC,
+            CP.NPOLIZA DESC
+    ]]>
+    </entry>
+    
+     <entry key="obtener.periodoCotizacion.tipoAfiliado">
+    <![CDATA[  
+		SELECT TO_CHAR(DECODE(CDTIPO_GENERACION,
+                    'A',TO_DATE(:periodoGeneracion, 'YYYYMM' )
+                    ,ADD_MONTHS(TO_DATE(:periodoGeneracion, 'YYYYMM' ),-1)), 'YYYYMM') PERIODO
+            FROM TCPG_CONDICIONES_COTIZA CC WHERE CC.CDTIPO_AFILIADO = :tipoAfiliado
+            AND ROWNUM <=1
+    ]]>
+    </entry>
+    
+    <entry key="consulta.condiciones.tipoCotizante">
+    <![CDATA[
+        SELECT CDTIPO_AFILIADO,
+               CDTIPO_COTIZANTE,
+               PTINGRESO_MAX_BASE_LIQ,
+               PTINGRESO_MIN_BASE_LIQ,
+               CDTIPO_GENERACION,
+               CDTIPO_TASA, 
+               SNINDICADOR_PROPORCIONAL_DIAS,
+               CDTIPO_NOVEDAD
+               FROM TCPG_CONDICIONES_COTIZA CC
+               WHERE CC.CDTIPO_COTIZANTE = :tipoCotizante
+                    OR CC.CDTIPO_AFILIADO = :tipoAfiliado 
+    ]]>
+    </entry>
+    
+    <entry key="consulta.contenido.query">
+    <![CDATA[
+        SELECT DSCONTENIDO CONTENIDO FROM TREC_QUERIES_PROCESO WHERE DSQUERY_ID = :queryid
+    ]]>
+	</entry>
+
+    <entry key="consulta.cobertura.afiliados">
+    <![CDATA[    
+        WITH
+        --los datos de los parametros, y el periodo a procesar segun tipo de generacion
+        INFO AS (
+            SELECT CDTIPO_AFILIADO,CDTIPO_COTIZANTE,PTINGRESO_MAX_BASE_LIQ,PTINGRESO_MIN_BASE_LIQ,CDTIPO_GENERACION,
+            DECODE(CDTIPO_GENERACION,
+                    'A',TO_DATE(:periodoGeneracion, 'YYYYMM' )
+                    ,ADD_MONTHS(TO_DATE(:periodoGeneracion, 'YYYYMM' ),-1)) PERIODO,
+            CDTIPO_TASA, SNINDICADOR_PROPORCIONAL_DIAS,CDTIPO_NOVEDAD
+            FROM TCPG_CONDICIONES_COTIZA
+        ),
+        -- busca los afiliados, les asigna prioridad 1 a los reg. si es encontrado por tipo_cotizante
+        AFILIADOS AS (
+	        SELECT DISTINCT * FROM (
+	            SELECT 
+	                cr.DNI dni,
+	                cr.CDTIPO_AFILIADO,
+	                cr.CDTIPO_COTIZANTE,
+	                DECODE(cr.CDTIPO_COTIZANTE, '23', '03', cr.CDTIPO_AFILIADO) CDTIPO_AFILIADO_CONTROL,
+	                cr.CDSUBTIPO_COTIZANTE,
+	                cr.NPOLIZA,
+	                cr.NCERTIFICADO,
+	                NVL(cr.PTSALARIO, 0) PTSALARIO,
+	                NVL(cr.ptultimo_ibc_cotizado, 0) ptultimo_ibc_cotizado,
+	                CASE WHEN Cr.CDTIPO_COTIZANTE||Cr.CDTIPO_AFILIADO IS NULL THEN '3'
+	                     WHEN Cr.CDTIPO_COTIZANTE IS NULL THEN '2'
+	                     WHEN Cr.CDTIPO_AFILIADO IS NULL THEN '1'
+	                    ELSE '' END ERROR,
+	                CC.PTINGRESO_MAX_BASE_LIQ,
+	                CC.PTINGRESO_MIN_BASE_LIQ,
+	                CC.PERIODO PERIODO_PROCESADO,
+	                CC.CDTIPO_GENERACION,
+	                CC.CDTIPO_TASA,
+	                CC.SNINDICADOR_PROPORCIONAL_DIAS,
+	                CC.CDTIPO_NOVEDAD,
+	                cr.FEALTA,
+                    cr.FEBAJA,
+                    CASE WHEN TO_CHAR(cr.FEALTA,'YYYYMM') = TO_CHAR(cc.PERIODO,'YYYYMM') THEN 'S'
+                        ELSE 'N' END ES_MISMO_PERIODO_DE_ALTA,
+                    CASE WHEN TO_CHAR(cr.FEALTA,'YYYYMM') > TO_CHAR(cc.PERIODO,'YYYYMM') THEN 'S'
+                        ELSE 'N' END PERIODO_MENOR_FEALTA,
+	                CASE WHEN CC.CDTIPO_COTIZANTE = CR.CDTIPO_COTIZANTE THEN 1
+	                    ELSE 2 END PRIORIDAD
+	            FROM
+	                T094_CUERPOLIZA_RIESGO cr
+	                inner JOIN INFO CC 
+	                    ON CC.CDTIPO_COTIZANTE = cr.CDTIPO_COTIZANTE
+	            WHERE
+	                cr.NPOLIZA = :poliza
+	                AND cr.FEALTA <= LAST_DAY(CC.PERIODO)
+	                AND cr.FEBAJA >= CC.PERIODO
+	                AND ((:dni IS NULL AND cr.DNI IS NOT NULL) OR ( :dni IS NOT NULL AND cr.DNI = :dni))
+	                --AND cr.DNI IN ('C37864466')
+	                --AND  cr.DNI = 'C1026134670' -----------------------
+	                --AND cr.DNI in ('C1152188409')
+            )
+        )
+        -- depura los registros filtrando por orden de prioridad
+        SELECT  DNI,
+                CDTIPO_AFILIADO,
+                CDTIPO_COTIZANTE,
+                CDSUBTIPO_COTIZANTE,
+                NPOLIZA,
+                NCERTIFICADO,
+                PTSALARIO,
+                PTULTIMO_IBC_COTIZADO,
+                ERROR,
+                PTINGRESO_MAX_BASE_LIQ,
+                PTINGRESO_MIN_BASE_LIQ,
+                TO_CHAR(PERIODO_PROCESADO,'YYYYMM') PERIODO_PROCESADO,
+                CDTIPO_GENERACION,
+                CDTIPO_TASA,
+                SNINDICADOR_PROPORCIONAL_DIAS,
+                CDTIPO_NOVEDAD,
+                FEALTA,
+                FEBAJA,
+                ES_MISMO_PERIODO_DE_ALTA,
+                PERIODO_MENOR_FEALTA,
+                COUNT(1) OVER(PARTITION BY DNI, CDTIPO_AFILIADO) NMRO_COBERTURAS,
+                '' TIPODOC_EMPLEADOR,
+                '' DNI_EMPLEADOR
+        FROM AFILIADOS A ORDER BY A.DNI, A.CDTIPO_AFILIADO, A.FEALTA DESC
+        
+    ]]>
+    </entry>
+
+    <entry key="consulta.tasa.esperada">
+    <![CDATA[    
+        WITH 
+            INFO AS (
+                SELECT
+                    r.POCOTIZACION_ATEP tasaCalculada,
+                    a.CDSUCURSAL,
+                    sd.CDSUCURSAL_PAGADORA,
+                    a.FEALTA
+                FROM T094_HISTORICO_AFILIADOS a
+                INNER JOIN T094_CUERPOLIZA_RIESGO CR
+                    ON CR.NPOLIZA = a.NPOLIZA
+                    AND CR.DNI = a.DNI
+                    AND CR.NCERTIFICADO = a.NCERTIFICADO
+                INNER JOIN T094_HISTORICO_RECLASIFICACION r 
+                    ON a.NPOLIZA = r.NPOLIZA
+                    AND a.CDSUCURSAL = r.CDSUCURSAL
+                INNER JOIN T094_HISTORICO_SUCURSALES_DEPE sd 
+                    ON a.NPOLIZA = sd.NPOLIZA
+                    AND a.CDSUCURSAL = sd.CDSUCURSAL
+                WHERE
+                    a.NPOLIZA =:poliza
+                    AND a.FEALTA <= LAST_DAY( TO_DATE(:periodo, 'YYYYMM' ))
+                    AND a.FEBAJA >= TO_DATE(:periodo, 'YYYYMM' )
+                    AND r.FEALTA <= LAST_DAY( TO_DATE(:periodo, 'YYYYMM' ))
+                    AND r.FEBAJA >= TO_DATE(:periodo, 'YYYYMM' )
+                    AND sd.FEALTA <= LAST_DAY( TO_DATE(:periodo, 'YYYYMM' ))
+                    AND sd.FEBAJA >= TO_DATE(:periodo, 'YYYYMM' )
+                    AND CR.FEALTA <= LAST_DAY( TO_DATE(:periodo, 'YYYYMM' ))
+                    AND CR.FEBAJA >= TO_DATE(:periodo, 'YYYYMM' )
+                    AND a.DNI =:dniAfiliado
+                    AND CR.CDTIPO_COTIZANTE = :tipoCotizante
+                    AND CR.CDTIPO_AFILIADO = :tipoAfiliado
+                ),
+             TASA_ACT_ECO AS(
+                SELECT TH.POCOTIZACION TASA
+                       FROM TAFI_HIST_ACTIV_INDEPEND  TH INNER JOIN T094_INDEPENDIENTES  TI
+                            ON TH.NMCONSECUTIVO_INDEPENDIENTE = TI.NMCONSECUTIVO_INDEPENDIENTE
+                            WHERE TI.NPOLIZA = :poliza
+	                        AND TI.DNI_AFILIADO = :dniAfiliado
+	                        AND TH.FEALTA <= LAST_DAY( TO_DATE(:periodo, 'YYYYMM' ))
+	                        AND TH.FEBAJA >= TO_DATE(:periodo, 'YYYYMM' )
+	                        AND :tipoCotizante = '59'
+	                        AND ROWNUM = 1
+             ),   
+             MAXIMO AS (
+                SELECT * FROM (
+                    SELECT R.*, 'MA' OP 
+                    FROM INFO R ORDER BY tasaCalculada DESC, FEALTA DESC
+                ) WHERE ROWNUM = 1
+             ), 
+             MINIMO AS (
+                SELECT * FROM (
+                    SELECT R.*, 'ME' OP 
+                    FROM INFO R ORDER BY tasaCalculada ASC, FEALTA DESC
+                ) WHERE ROWNUM = 1
+             ),
+             ULTIMO AS (
+                SELECT * FROM (
+                    SELECT R.*, 'UL' OP
+                    FROM INFO R ORDER BY FEALTA DESC
+                ) WHERE ROWNUM = 1
+             )
+             
+             SELECT GREATEST(tasaCalculada, NVL((SELECT TASA FROM TASA_ACT_ECO),0)) tasaCalculada, 
+                    CDSUCURSAL, CDSUCURSAL_PAGADORA FROM MAXIMO WHERE OP = :tipoTasa
+             UNION
+             SELECT GREATEST(tasaCalculada, NVL((SELECT TASA FROM TASA_ACT_ECO),0)) tasaCalculada,
+                    CDSUCURSAL, CDSUCURSAL_PAGADORA FROM MINIMO WHERE OP = :tipoTasa
+             UNION
+             SELECT GREATEST(tasaCalculada, NVL((SELECT TASA FROM TASA_ACT_ECO),0)) tasaCalculada,
+                    CDSUCURSAL, CDSUCURSAL_PAGADORA FROM ULTIMO WHERE OP = :tipoTasa
+             UNION
+             SELECT GREATEST(tasaCalculada, NVL((SELECT TASA FROM TASA_ACT_ECO),0)) tasaCalculada,
+                    CDSUCURSAL, CDSUCURSAL_PAGADORA FROM MAXIMO WHERE NVL(:tipoTasa, 'O') NOT IN ('MA','ME','UL')
+    ]]>
+    </entry>
+
+    <entry key="consulta.dias.esperada">
+    <![CDATA[    
+	WITH TOBTENER_PARAMETROS AS
+		 (SELECT :indicadorDias AS CDIND_PROPORCIONAL_DIAS,
+		         (CASE
+		           WHEN (:indicadorDias IN ('N', 'S') AND :tipoNovedad IS NOT NULL) THEN
+		            'S'
+		           ELSE
+		            'N'
+		         END) AS CDAPLICA_NOVEDAD,
+		         (CASE
+		           WHEN TO_CHAR(CPR.FEALTA, 'YYYYMM') = :periodo AND
+		                TO_CHAR(CPR.FEBAJA, 'YYYYMM') = :periodo THEN
+		            'AMB'
+		           WHEN TO_CHAR(CPR.FEALTA, 'YYYYMM') <> :periodo AND
+		                TO_CHAR(CPR.FEBAJA, 'YYYYMM') = :periodo THEN
+		            'RET'
+		           WHEN TO_CHAR(CPR.FEALTA, 'YYYYMM') = :periodo AND
+		                TO_CHAR(CPR.FEBAJA, 'YYYYMM') <> :periodo THEN
+		            'ING'
+		           ELSE
+		            'NOA'
+		         END) AS CDTIPO_NOVEDAD,
+                 TO_DATE(:periodo, 'YYYYMM') AS FEINICIAL_PERIODO,
+		         (CASE WHEN TO_CHAR(LAST_DAY(TO_DATE(:periodo, 'YYYYMM')), 'DD') > 30 THEN LAST_DAY(TO_DATE(:periodo, 'YYYYMM')) - 1 ELSE LAST_DAY(TO_DATE(:periodo, 'YYYYMM')) END)  FEFINAL_PERIODO,
+		         --(TO_CHAR(LAST_DAY(TO_DATE(:periodo, 'YYYYMM')),'DD') -30 ) AS DIFERENCIA_CUADRE_FECHA,
+		         (CASE WHEN TO_CHAR(CPR.FEALTA,'DD') > 30 THEN CPR.FEALTA - 1 ELSE CPR.FEALTA END) FEALTA,
+		         (CASE WHEN TO_CHAR(CPR.FEBAJA,'DD') > 30 THEN CPR.FEBAJA - 1 ELSE CPR.FEBAJA END) FEBAJA,
+                 TO_CHAR(TO_DATE(:periodo, 'YYYYMM'), 'MM') MES,
+                 TO_NUMBER(TO_CHAR(CPR.FEBAJA,'DD')) DIA,
+		         ROW_NUMBER() OVER(ORDER BY CPR.FEALTA) AS IDENTIFICADOR
+		    FROM T094_CUERPOLIZA_RIESGO CPR
+		   WHERE CPR.NPOLIZA = :poliza
+		     AND CPR.DNI = :dniAfiliado
+		     AND CPR.CDTIPO_COTIZANTE IN (:tipoCotizante)
+		     AND CPR.CDTIPO_AFILIADO = :tipoAfiliado
+		     AND CPR.FEALTA <= LAST_DAY(TO_DATE(:periodo, 'YYYYMM'))
+		     AND CPR.FEBAJA >= TO_DATE(:periodo, 'YYYYMM')
+		   ORDER BY CPR.FEALTA),
+		TCALCULAR_DIAS AS
+		 (SELECT (CASE
+		           WHEN OP.CDTIPO_NOVEDAD = 'ING' THEN
+		            TRUNC(OP.FEFINAL_PERIODO - OP.FEALTA) + 1 --- DIFERENCIA_CUADRE_FECHA
+		           WHEN OP.CDTIPO_NOVEDAD = 'RET' THEN
+		            TRUNC(OP.FEBAJA - OP.FEINICIAL_PERIODO) + 1 --- (CASE WHEN OP.MES = '02' AND OP.DIA >= 28  THEN DIFERENCIA_CUADRE_FECHA ELSE 0 END) 
+		           WHEN OP.CDTIPO_NOVEDAD = 'AMB' THEN
+		            TRUNC(OP.FEBAJA - OP.FEALTA) + 1 --- (CASE WHEN OP.MES = '02' AND OP.DIA >= 28 AND FEALTA = FEINICIAL_PERIODO THEN DIFERENCIA_CUADRE_FECHA ELSE 0 END) 
+		           WHEN OP.CDTIPO_NOVEDAD = 'NOA' THEN
+		            TRUNC(OP.FEFINAL_PERIODO - OP.FEINICIAL_PERIODO) + 1 ---DIFERENCIA_CUADRE_FECHA
+		           ELSE
+		            -1
+		         END) AS DIFERENCIA_DIAS,
+		         OP.IDENTIFICADOR
+		    FROM TOBTENER_PARAMETROS OP),
+            --SELECT * FROM TCALCULAR_DIAS
+            TSUMAR_DIAS AS
+		 (SELECT SUM(CASE
+		               WHEN (OP.CDIND_PROPORCIONAL_DIAS = 'S' AND
+		                    OP.CDAPLICA_NOVEDAD IN ('N', 'S')) THEN
+		                CD.DIFERENCIA_DIAS
+		               WHEN (OP.CDIND_PROPORCIONAL_DIAS = 'N' AND
+		                    OP.CDAPLICA_NOVEDAD = 'S') THEN
+		                CD.DIFERENCIA_DIAS
+		               WHEN (OP.CDIND_PROPORCIONAL_DIAS = 'N' AND
+		                    OP.CDAPLICA_NOVEDAD = 'N') THEN
+		                30
+		               ELSE
+		                -1
+		             END) AS DIAS_TOTALES,
+		         CD.IDENTIFICADOR
+		    FROM TCALCULAR_DIAS CD, TOBTENER_PARAMETROS OP
+		   WHERE CD.IDENTIFICADOR = OP.IDENTIFICADOR
+		   GROUP BY CD.IDENTIFICADOR),
+		DIAS_TOTALES AS
+		 (SELECT (CASE
+		           WHEN TO_CHAR(TO_DATE(:periodo, 'YYYYMM'), 'MM') = '02'  THEN
+		            (CASE
+		              WHEN SD.DIAS_TOTALES = 28 AND TO_CHAR(LAST_DAY(TO_DATE(:periodo, 'YYYYMM')), 'DD') != '29' THEN
+		               30
+		              WHEN SD.DIAS_TOTALES >= 29 THEN 30
+		              ELSE
+		               SD.DIAS_TOTALES
+		            END)
+		           WHEN SD.DIAS_TOTALES > 30 THEN 30
+		           ELSE
+		            SD.DIAS_TOTALES
+		         END) AS DIAS_ESPERADOS,
+		         IDENTIFICADOR
+		    FROM TSUMAR_DIAS SD)
+		SELECT (CASE
+		         WHEN TO_CHAR(TO_DATE(:periodo, 'YYYYMM'), 'MM') = '02'  THEN
+		          (CASE
+		            WHEN SUM(DT.DIAS_ESPERADOS) = 28 AND TO_CHAR(LAST_DAY(TO_DATE(:periodo, 'YYYYMM')), 'DD') != '29' THEN
+		             30
+		            WHEN SUM(DT.DIAS_ESPERADOS) >= 29 THEN 30
+		            ELSE
+		             SUM(DT.DIAS_ESPERADOS)
+		          END)
+		          WHEN SUM(DT.DIAS_ESPERADOS) > 30 THEN 30
+		         ELSE
+		          SUM(DT.DIAS_ESPERADOS)
+		       END) DIAS_ESPERADOS
+		  FROM DIAS_TOTALES DT      
+    ]]>
+    </entry>
+
+
+    <entry key="consulta.datos.ibc.novedades">
+    <![CDATA[
+       WITH         
+         -- obtiene las novedades del afiliado con el periodo anteior encontrado
+         NOVEDADES_AFILIADO AS (
+            SELECT * FROM (
+                SELECT N.CDTIPO_AFILIADO,
+                    TRIM( SNSLN ) SNSLN, TRIM( SNLMA ) SNLMA, TRIM ( NMIRP ) NMIRP, TRIM( SNIGE ) SNIGE, TRIM( SNVAC ) SNVAC,
+                    TRIM( SNVTE ) SNVTE, TRIM( SNRET ) SNRET, TRIM( SNING ) SNING, N.NMPERIODO,
+                    PTINGRESO_BASE_LIQ, NMDIAS_COTIZADOS, PTSALARIO_BASICO, CA.NMFORMULARIO_PAGO 
+                FROM T094_NOVEDADES n, T094_CONTROL_AUTOLIQUIDACIONES CA, TCPG_CONDICIONES_COTIZA CC
+                WHERE  N.DNI_EMPLEADO = :dni
+                   AND N.TIPO_DOCUMENTO_EMPLEADO = :tipoDocumento
+                   AND CA.NPOLIZA = :npoliza
+                   AND CA.NMFORMULARIO_PAGO = N.NMFORMULARIO_PAGO
+                   AND N.CDTIPO_AFILIADO = CC.CDTIPO_COTIZANTE
+                   AND CC.CDTIPO_AFILIADO = :tipoAfiliado
+                   AND( 
+                        (   
+                            :tipoAfiliado = '01'
+                            AND :tipoCotizante <> '23'
+                            AND CC.CDTIPO_AFILIADO = :tipoAfiliado
+                            AND N.CDTIPO_AFILIADO <> 23
+                            AND CA.CDTIPO_PLANILLA NOT IN ('I','Y','K','N','U','J')
+                        ) 
+                        OR(
+                            :tipoCotizante = '23'
+                            AND CC.CDTIPO_AFILIADO = :tipoAfiliado
+                            AND N.CDTIPO_AFILIADO = :tipoCotizante
+                            AND CA.CDTIPO_PLANILLA IN ('K','M','A')
+                        )
+                        OR(
+                            :tipoAfiliado = '02'
+                            --AND CC.CDTIPO_COTIZANTE = :tipoCotizante
+                            AND CC.CDTIPO_AFILIADO = :tipoAfiliado
+                            AND CA.CDTIPO_PLANILLA IN ('Y','I','M','A')
+                        )
+                    
+                   )
+                   AND SUBSTR(N.NMPERIODO,1,2) NOT IN ('01','12','06')
+                   AND TO_DATE(N.NMPERIODO,'mmyyyy')  < TO_DATE(:periodo,'yyyymm')          
+                   ORDER BY TO_DATE(N.NMPERIODO,'mmyyyy') DESC
+               ) WHERE ROWNUM=1
+         ),
+         -- se calcula valor adicional para identificar registros sin novedades marcadas 
+         NOVEDADES_AFILIADO2 AS (
+            SELECT N.*,
+                CASE WHEN SNSLN||SNLMA||SNIGE||SNVAC||SNVTE||SNRET||SNING IS NULL AND (NMIRP=0 OR NMIRP IS NULL) THEN 1
+                ELSE NULL END SIN_MARCAR
+            FROM NOVEDADES_AFILIADO N
+         ),
+         -- obtiene la ley con que fue cargada la pila
+         LEY AS (
+            SELECT DISTINCT CDLEY LEY FROM T094_CONTROL_AUTOLIQUIDACIONES C, NOVEDADES_AFILIADO2 N
+            WHERE C.NMFORMULARIO_PAGO = (SELECT NMFORMULARIO_PAGO FROM NOVEDADES_AFILIADO WHERE ROWNUM=1)
+         ),
+         DIAS_MAX_IBC AS (
+                SELECT NMDIAS_COTIZADOS DIAS_MAX_IBC FROM (
+                                SELECT NMDIAS_COTIZADOS FROM NOVEDADES_AFILIADO ORDER BY PTINGRESO_BASE_LIQ DESC
+                            ) WHERE ROWNUM = 1
+         ),
+         -- sumtorias y valores del afiliado para operaciones         
+         VALORES_IBC_NOVEDADES AS (
+             SELECT MAX(PTINGRESO_BASE_LIQ) maximoIbc,
+                    SUM(NMDIAS_COTIZADOS) totalDias,
+                    MAX(PTSALARIO_BASICO) maximoSalario,
+                    COUNT(SNSLN)+ SUM(NMIRP)+ COUNT(SNLMA)+ COUNT(SNIGE)+ COUNT(SNVAC) totalNovedadesAusentismo,
+                    COUNT(SNVTE)+ COUNT(SNRET)+ COUNT(SNING)+COUNT(SIN_MARCAR) totalNovedadesLaboradas,
+                    SUM( CASE WHEN(SNSLN IS NOT NULL OR NMIRP <> 0 OR SNIGE IS NOT NULL OR SNLMA IS NOT NULL OR SNVAC IS NOT NULL ) THEN NMDIAS_COTIZADOS ELSE 0 END ) totalDiasAusentismo,
+                    SUM( CASE WHEN(SNVTE <> 0 OR SNRET IS NOT NULL OR SNING IS NOT NULL OR SIN_MARCAR IS NOT NULL ) THEN NMDIAS_COTIZADOS ELSE 0 END ) totalDiasLabodos,
+                    SUM( CASE WHEN(SNSLN IS NULL AND (NMIRP = 0 OR NMIRP IS NULL) AND SNIGE IS NULL AND SNLMA IS NULL AND SNVAC IS NULL OR SIN_MARCAR IS NOT NULL) THEN PTINGRESO_BASE_LIQ ELSE 0 END ) totalIbcLaborados  
+                    FROM NOVEDADES_AFILIADO2
+                    
+         )
+         SELECT * FROM VALORES_IBC_NOVEDADES,LEY,DIAS_MAX_IBC 
+    ]]>
+    </entry>
+
+    <entry key="registro.esperada">
+    <![CDATA[
+    INSERT INTO
+        TCPG_ESTADO_CUENTA(
+            NMCONSECUTIVO,
+            NMPOLIZA,
+            DNI_AFILIADO,
+            CDTIPO_COTIZANTE,
+            CDSUBTIPO_COTIZANTE,
+            CDTIPO_AFILIADO,
+            NMDIAS_ESPERADOS,
+            POTASA_ESPERADA,
+            PTINGRESO_BASE_LIQ_ESPERADO,
+            PTCOTIZACION_ESPERADA,
+            PTSALARIO,
+            CDSUCURSAL,
+            CDSUCURSAL_PAGADORA,
+            NMPERIODO,
+            CDTIPO_GENERACION,
+            NMPERIODO_GENERACION,
+            SNEXISTE_PAGO,
+            FEINGRESA,
+            DNI_INGRESA,
+            DSOBSERVACIONES,
+            NMTOTAL_COBERTURAS,
+            CDESTADO_PAGO,
+            FELIMITE_PAGO,
+            PTSALDO
+        ) SELECT
+            SEQ_CPG_ESTADO_CUENTA.NEXTVAL,
+            :poliza,
+            :dniAfiliado,
+            :tipoCotizante,
+            :subTipoCotizante,
+            :tipoAfiliado,
+            :dias,
+            :tasa,
+            :ibc,
+            :cotizacion,
+            :salario,
+            :centroTrabajo,
+            :centroTrabajoPagador,
+            :periodoProceso,
+            :tipoGeneracion,
+            :periodoGeneracion,
+            :existePago,
+            SYSDATE,
+            :dniIngresa,
+            :observaciones,
+            :numeroCoberturas,
+            :estadoPago,
+            (CASE WHEN :tipoAfiliado = '02' 
+            	 THEN (SELECT PKGAFI_FUNCIONES_OPERACIONES.FUNAFI_FECHA_LIMITE_PAGO(:dniAfiliado,:periodoProceso) FROM DUAL)
+            	 ELSE :fechaLimitePago 
+             END) fechaLimitePago,
+            :saldo
+        FROM DUAL
+        WHERE
+            NOT EXISTS(
+                SELECT 1
+                FROM TCPG_ESTADO_CUENTA
+                WHERE
+                    NMPOLIZA =:poliza
+                    AND DNI_AFILIADO =:dniAfiliado
+                    AND CDTIPO_COTIZANTE =:tipoCotizante
+                    AND NMPERIODO =:periodoProceso
+            )
+    ]]>
+    </entry>
+    
+    <entry key="consulta.existencia.condicion.por.tipo.cotizante">
+    <![CDATA[
+    SELECT
+        COUNT( 1 ) AS HAY_TIPO_COTIZANTE
+    FROM
+        TCPG_CONDICIONES_COTIZA CC
+    WHERE
+        CC.CDTIPO_COTIZANTE =:tipoCotizante
+    ]]>
+    </entry>
+    
+    <entry key="consulta.condicion.sin.tipo.cotizante">
+    <![CDATA[
+        WITH TSIN_TIPO_COTIZANTE AS(
+            SELECT
+                *
+            FROM
+                TCPG_CONDICIONES_COTIZA CC1
+            WHERE
+                CC1.NMCONSECUTIVO =:consecutivo
+                AND CC1.FEALTA <= LAST_DAY( TO_DATE(:periodo, 'YYYYMM' ))
+                AND CC1.FEBAJA >= TO_DATE(:periodo, 'YYYYMM' )
+        ),
+        TCON_TIPO_AFILIADO AS(
+            SELECT
+                *
+            FROM
+                TCPG_CONDICIONES_COTIZA CC3
+            WHERE
+                CC3.CDTIPO_AFILIADO =:tipoAfiliado
+                AND CC3.FEALTA <= LAST_DAY( TO_DATE(:periodo, 'YYYYMM' ))
+                AND CC3.FEBAJA >= TO_DATE(:periodo, 'YYYYMM' )
+        ) SELECT
+            NVL( STC.CDTIPO_TASA, CTA.CDTIPO_TASA ) AS CDTIPO_TASA,
+            NVL( STC.PTINGRESO_MIN_BASE_LIQ, CTA.PTINGRESO_MIN_BASE_LIQ ) AS PTINGRESO_MIN_BASE_LIQ,
+            NVL( STC.PTINGRESO_MAX_BASE_LIQ, CTA.PTINGRESO_MAX_BASE_LIQ ) AS PTINGRESO_MAX_BASE_LIQ,
+            NVL( STC.SNINDICADOR_PROPORCIONAL_DIAS, CTA.SNINDICADOR_PROPORCIONAL_DIAS ) AS SNINDICADOR_PROPORCIONAL_DIAS,
+            NVL( STC.CDTIPO_GENERACION, CTA.CDTIPO_GENERACION ) AS CDTIPO_GENERACION,
+            NVL( STC.CDTIPO_NOVEDAD, CTA.CDTIPO_NOVEDAD ) AS CDTIPO_NOVEDAD
+        FROM
+            TSIN_TIPO_COTIZANTE STC,
+            TCON_TIPO_AFILIADO CTA
+    ]]>
+    </entry>
+    
+    <entry key="consulta.condicion.con.tipo.afiliado">
+    <![CDATA[
+        SELECT
+            *
+        FROM
+            TCPG_CONDICIONES_COTIZA CC3
+        WHERE
+            CC3.CDTIPO_AFILIADO =:tipoAfiliado
+            AND CC3.FEALTA <= LAST_DAY( TO_DATE(:periodo, 'YYYYMM' ))
+            AND CC3.FEBAJA >= TO_DATE(:periodo, 'YYYYMM' )
+    ]]>
+    </entry>
+
+    <entry key="consulta.condicion.con.tipo.cotizante">
+    <![CDATA[
+        WITH TCON_TIPO_COTIZANTE AS(
+            SELECT
+                *
+            FROM
+                TCPG_CONDICIONES_COTIZA CC2
+            WHERE
+                CC2.CDTIPO_COTIZANTE =:tipoCotizante
+                AND CC2.FEALTA <= LAST_DAY( TO_DATE(:periodo, 'YYYYMM' ))
+                AND CC2.FEBAJA >= TO_DATE(:periodo, 'YYYYMM' )
+        ),
+        TCON_TIPO_AFILIADO AS(
+            SELECT
+                *
+            FROM
+                TCPG_CONDICIONES_COTIZA CC3
+            WHERE
+                CC3.CDTIPO_AFILIADO =:tipoAfiliado
+                AND CC3.FEALTA <= LAST_DAY( TO_DATE(:periodo, 'YYYYMM' ))
+                AND CC3.FEBAJA >= TO_DATE(:periodo, 'YYYYMM' )
+        ) SELECT
+            NVL( CTC.CDTIPO_TASA, CTA.CDTIPO_TASA ) AS CDTIPO_TASA,
+            NVL( CTC.PTINGRESO_MIN_BASE_LIQ, CTA.PTINGRESO_MIN_BASE_LIQ ) AS PTINGRESO_MIN_BASE_LIQ,
+            NVL( CTC.PTINGRESO_MAX_BASE_LIQ, CTA.PTINGRESO_MAX_BASE_LIQ ) AS PTINGRESO_MAX_BASE_LIQ,
+            NVL( CTC.SNINDICADOR_PROPORCIONAL_DIAS, CTA.SNINDICADOR_PROPORCIONAL_DIAS ) AS SNINDICADOR_PROPORCIONAL_DIAS,
+            NVL( CTC.CDTIPO_GENERACION, CTA.CDTIPO_GENERACION ) AS CDTIPO_GENERACION,
+            NVL( CTC.CDTIPO_NOVEDAD, CTA.CDTIPO_NOVEDAD ) AS CDTIPO_NOVEDAD
+        FROM
+            TCON_TIPO_COTIZANTE CTC,
+            TCON_TIPO_AFILIADO CTA
+    ]]>
+    </entry>
+    
+    <entry key="consulta.salarioMinimo.vigente.periodo.nousar">
+    <![CDATA[
+        WITH
+         -- obtiene el ultimo periodo para la busqueda segun las reglas
+         PERIODO_A_PROCESAR AS (
+            SELECT TO_CHAR(PERIODO_CONS_SMMLV, 'yyyymm') PERIODO_CONS_SMMLV FROM
+                (SELECT CASE TO_CHAR(PERIODO_COTIZACION,'mm')
+                    WHEN '01' THEN ADD_MONTHS(PERIODO_COTIZACION,-1)
+                    ELSE PERIODO_COTIZACION END AS PERIODO_CONS_SMMLV
+                FROM (SELECT TO_DATE(:periodo,'yyyymm') AS PERIODO_COTIZACION FROM dual))
+         )
+         SELECT PKGAFI_FUNCIONES_OPERACIONES.FUNAFI_SALARIO_MINIMO(PERIODO_CONS_SMMLV) FROM PERIODO_A_PROCESAR 
+    ]]>
+    </entry>
+    
+	<entry key="obtener.fechaLimitePago.polizaXPeriodo">
+    <![CDATA[
+      select PKGAFI_FUNCIONES_OPERACIONES.FUNAFI_FECHA_LIMITE_PAGO(:poliza,:periodo) as fechaLimitePago from dual
+    ]]>        
+    </entry>
+
+	<entry key="registro.controlestadocuenta">
+	<![CDATA[
+	    INSERT INTO TCPG_CONTROL_ESTADOCUENTA (NMPERIODO_GENERACION, NMPOLIZA, FEINGRESA, DNI_INGRESA, FELIMITE_PAGO, NMPERIODO, CDTIPO_AFILIADO, 
+	    				NMEXPUESTOS_INICIAL, PTVALOR_ESPERADOS_INICIAL, NMTOTAL_AFILIADOS_INICIAL, NMTOTAL_TRABAJADORES_INICIAL, PTVALOR_ESPERADO, 
+	    				NMTOTAL_TRABAJADORES, PTSALDO_INICIAL, PTDEUDA, PTSALDO_A_FAVOR, SNCONCILIADO, SNMOVIDO, CDESTADO_PAGO) 
+            SELECT :periodoGeneracion, :poliza, sysdate, :usuarioOperacion, :fechaLimitePago, :periodoCotizacion, :tipoAfiliado,
+            	   :expuestosInicial, :valorEsperadoInicial, :totalAfiliadosInicial, :totalTrabajadoresInicial, :valorEsperado,
+            	   :totalTrabajadores, :valorSaldoInicial, :deuda, :saldoFavor, :conciliado, :reabierto, :estadoPago
+            FROM DUAL
+            WHERE NOT EXISTS(SELECT 1 FROM TCPG_CONTROL_ESTADOCUENTA e2 WHERE e2.NMPERIODO = :periodoCotizacion AND e2.NMPOLIZA = :poliza AND e2.CDTIPO_AFILIADO = :tipoAfiliado)
+	]]>
+	</entry>
+	
+	<entry key="actualizacion.controlestadocuenta">
+	<![CDATA[	
+	   UPDATE TCPG_CONTROL_ESTADOCUENTA
+      			 SET NMTOTAL_TRABAJADORES_INICIAL = NMTOTAL_TRABAJADORES_INICIAL + :totalTrabajadoresInicial,
+       			     NMTOTAL_TRABAJADORES = NMTOTAL_TRABAJADORES + :totalTrabajadores,
+       			     NMEXPUESTOS_INICIAL = NMEXPUESTOS_INICIAL + :expuestosInicial,		
+       				 PTVALOR_ESPERADOS_INICIAL = PTVALOR_ESPERADOS_INICIAL + :valorEsperadoInicial,
+       				 PTVALOR_ESPERADO = PTVALOR_ESPERADO + :valorEsperado
+       WHERE NMPERIODO = :periodoCotizacion AND NMPOLIZA = :poliza AND CDTIPO_AFILIADO = :tipoAfiliado
+             AND EXISTS(SELECT 1 FROM TCPG_CONTROL_ESTADOCUENTA e2 WHERE e2.NMPERIODO = :periodoCotizacion AND e2.NMPOLIZA = :poliza AND e2.CDTIPO_AFILIADO = :tipoAfiliado)	   
+	]]>
+	</entry>
+	
+	<entry key="consulta.controlestadocuenta">
+	<![CDATA[
+	   SELECT NMTOTAL_AFILIADOS_INICIAL totalAfiliadosInicial, NMTOTAL_TRABAJADORES_INICIAL totalTrabajadoresInicial, FELIMITE_PAGO fechaLimitePago, CDTIPO_AFILIADO tipoAfiliado 
+	  	 FROM TCPG_CONTROL_ESTADOCUENTA 
+	   	WHERE NMPERIODO = :periodoCotizacion AND NMPOLIZA = :poliza AND CDTIPO_AFILIADO = :tipoAfiliado AND ROWNUM <=1
+	]]>
+	</entry>
+	
+	<entry key="borrar.controlestadocuenta">
+	<![CDATA[
+	   DELETE FROM TCPG_CONTROL_ESTADOCUENTA 
+       WHERE NMPERIODO = :periodoCotizacion AND NMPOLIZA = :poliza AND CDTIPO_AFILIADO = :tipoAfiliado
+	]]>
+	</entry>
+	
+	<entry key="borrar.estadocuenta">
+	<![CDATA[
+	   DELETE FROM TCPG_ESTADO_CUENTA
+       WHERE NMPOLIZA = :poliza AND NMPERIODO = :periodoCotizacion
+	]]>
+	</entry>
+	
+	<entry key="borrar.errorproceso">
+	<![CDATA[
+	   DELETE FROM TCPG_ERRORES_PROCESOS WHERE NMPOLIZA = :poliza AND NMPERIODO = :periodoCotizacion
+	]]>
+	</entry>
+	
+	<entry key="consulta.errorproceso.totalErrores">
+	<![CDATA[
+	   SELECT count(1) totalErrores FROM TCPG_ERRORES_PROCESOS WHERE NMPOLIZA = :poliza AND NMPERIODO = :periodoCotizacion AND CDCODIGO_ERROR != 'PE008'
+	]]>
+	</entry>
+    
+    <entry key="registro.errorproceso">
+    <![CDATA[
+	    INSERT
+	    INTO
+	        TCPG_ERRORES_PROCESOS(
+	            NMCONSECUTIVO,
+	            CDCODIGO_ERROR,
+	            FEINGRESA,
+	            DNI_AFILIADO,
+	            NMPOLIZA,
+	            NMPERIODO,
+	            DNI_INGRESA,
+	            CDCODIGO_PROCESO,
+	            NMPERIODO_GENERACION,
+	            CDTIPO_GENERACION,
+	            DSOBSERVACION,
+                DSESTADO,
+                CDTIPO_COTIZANTE
+	        )
+	    VALUES(
+	        SEQ_CPG_ERROR_PROCESO.NEXTVAL,
+	        :codError,
+	        SYSDATE,
+	        :dni,
+	        :npoliza,
+	        :periodo,
+	        :dniIngresa,
+	        :codProceso,
+	        :nmperiodoGeneracion,
+	        :tipoGeneracion,
+	        :observacion,
+            :estado,
+            :tipoCotizante
+	    )
+    ]]>
+    </entry>
+    
+    <entry key="registro.errorproceso.unico">
+    <![CDATA[    
+        INSERT INTO TCPG_ERRORES_PROCESOS
+                  ( NMCONSECUTIVO,
+                        CDCODIGO_ERROR,
+                        FEINGRESA,
+                        DNI_AFILIADO,
+                        NMPOLIZA,
+                        NMPERIODO,
+                        DNI_INGRESA,
+                        CDCODIGO_PROCESO,
+                        NMPERIODO_GENERACION,
+                        CDTIPO_GENERACION,
+                        DSOBSERVACION,                        
+                        DSESTADO,
+                        CDTIPO_COTIZANTE
+                    )
+                SELECT 
+                    SEQ_CPG_ERROR_PROCESO.NEXTVAL,
+                    :codError,
+                    SYSDATE,
+                    :dni,
+                    :npoliza,
+                    :periodo,
+                    :dniIngresa,
+                    :codProceso,
+                    :nmperiodoGeneracion,
+                    :tipoGeneracion,
+                    :observacion,
+                    :estado,
+                    :tipoCotizante
+                FROM DUAL
+                    WHERE NOT EXISTS (SELECT 1 FROM TCPG_ERRORES_PROCESOS WHERE 
+                                        CDCODIGO_ERROR =:codError AND NMPOLIZA =:npoliza AND NMPERIODO =:periodo 
+                                        AND CDCODIGO_PROCESO =:codProceso AND CDTIPO_GENERACION =:tipoGeneracion
+                                        AND DNI_AFILIADO = :dni AND CDTIPO_COTIZANTE = :tipoCotizante
+                                      )
+    ]]>
+    </entry>
+    
+    
+    
+    <entry key="actualizar.estadocuenta.inconsistencia.estado">
+    <![CDATA[
+        UPDATE TCPG_ERRORES_PROCESOS SET DSESTADO = :nuevoEstado 
+        WHERE NMPOLIZA = :poliza AND NMPERIODO_GENERACION = :periodoGeneracion AND NMPERIODO = :periodoCotizacion 
+        AND DSESTADO = 'POR_CORREGIR' AND CDCODIGO_ERROR = :codigoInconsistencia AND DNI_AFILIADO = :dniAfiliado        
+    ]]>
+    </entry>
+    
+    <entry key="actualizar.estadocuenta.inconsistencias.segun.afiliado">
+    <![CDATA[
+        UPDATE TCPG_ERRORES_PROCESOS SET DSESTADO = :nuevoEstado 
+        WHERE NMPOLIZA = :poliza AND NMPERIODO_GENERACION = :periodoGeneracion AND NMPERIODO = :periodoCotizacion 
+        AND DNI_AFILIADO = :dniAfiliado        
+    ]]>
+    </entry>
+    
+    <entry key="consulta.multiple.cobertura">
+        <![CDATA[
+            SELECT count(1) COBERTURA
+            FROM T094_CUERPOLIZA_RIESGO CPR
+            WHERE CPR.NPOLIZA = :poliza
+            AND CPR.DNI = :dniAfiliado
+            AND CPR.CDTIPO_COTIZANTE = :tipoCotizante
+            AND CPR.CDTIPO_AFILIADO = :tipoAfiliado
+            AND CPR.FEALTA <= LAST_DAY(TO_DATE(:periodo, 'YYYYMM'))
+            AND CPR.FEBAJA >= TO_DATE(:periodo, 'YYYYMM')
+        ]]>
+        </entry>
+    
+    <entry key="consulta.parametro.codigo">
+    <![CDATA[
+      SELECT DSVALOR valor FROM TREC_PARAMETROS WHERE CDCODIGO = :codigo            
+    ]]>
+    </entry>
+            
+    <entry key="consulta.info.cobertura.afiliado">
+    <![CDATA[    
+        WITH
+        --los datos de los parametros, y el periodo a procesar segun tipo de generacion
+        INFO AS (
+            SELECT CDTIPO_AFILIADO,CDTIPO_COTIZANTE,PTINGRESO_MAX_BASE_LIQ,PTINGRESO_MIN_BASE_LIQ,CDTIPO_GENERACION,
+            DECODE(CDTIPO_GENERACION,
+                    'A',TO_DATE(:periodoGeneracion, 'YYYYMM' )
+                    ,ADD_MONTHS(TO_DATE(:periodoGeneracion, 'YYYYMM' ),-1)) PERIODO,
+            CDTIPO_TASA, SNINDICADOR_PROPORCIONAL_DIAS,CDTIPO_NOVEDAD
+            FROM TCPG_CONDICIONES_COTIZA
+        ),
+        -- busca los afiliados, les asigna prioridad 1 a los reg. si es encontrado por tipo_cotizante
+        AFILIADOS AS (
+            SELECT DISTINCT * FROM (
+                SELECT 
+                    cr.DNI dni,
+                    cr.CDTIPO_AFILIADO,
+                    cr.CDTIPO_COTIZANTE,
+                    cr.NCERTIFICADO,
+                    NVL(cr.PTSALARIO, 0) PTSALARIO,
+                    NVL(cr.ptultimo_ibc_cotizado, 0) ptultimo_ibc_cotizado,
+                    CASE WHEN Cr.CDTIPO_COTIZANTE||Cr.CDTIPO_AFILIADO IS NULL THEN '3'
+                         WHEN Cr.CDTIPO_COTIZANTE IS NULL THEN '2'
+                         WHEN Cr.CDTIPO_AFILIADO IS NULL THEN '1'
+                        ELSE '' END ERROR,
+                    CC.PTINGRESO_MAX_BASE_LIQ,
+                    CC.PTINGRESO_MIN_BASE_LIQ,
+                    CC.PERIODO PERIODO_PROCESADO,
+                    CC.CDTIPO_GENERACION,
+                    CC.CDTIPO_TASA,
+                    CC.SNINDICADOR_PROPORCIONAL_DIAS,
+                    CC.CDTIPO_NOVEDAD,
+                    cr.FEALTA,
+                    cr.FEBAJA,
+                    CASE WHEN TO_CHAR(cr.FEALTA,'YYYYMM') = TO_CHAR(cc.PERIODO,'YYYYMM') THEN 'S'
+                        ELSE 'N' END ES_MISMO_PERIODO_DE_ALTA,
+                    CASE WHEN TO_CHAR(cr.FEALTA,'YYYYMM') > TO_CHAR(cc.PERIODO,'YYYYMM') THEN 'S'
+                        ELSE 'N' END PERIODO_MENOR_FEALTA,
+                    CASE WHEN CC.CDTIPO_COTIZANTE = CR.CDTIPO_COTIZANTE THEN 1
+                        ELSE 2 END PRIORIDAD
+                FROM
+                    T094_CUERPOLIZA_RIESGO cr
+                    inner JOIN INFO CC 
+                        ON CC.CDTIPO_COTIZANTE = cr.CDTIPO_COTIZANTE
+                        OR CC.CDTIPO_AFILIADO = cr.CDTIPO_AFILIADO 
+                WHERE
+                    cr.NPOLIZA = :poliza
+                    AND cr.FEALTA <= LAST_DAY(CC.PERIODO)
+                    AND cr.FEBAJA >= CC.PERIODO
+                    AND  cr.DNI = :dni
+                ORDER BY cr.FEALTA DESC
+            )
+        )
+        -- depura los registros filtrando por orden de prioridad
+        SELECT dni,
+                CDTIPO_AFILIADO,
+                CDTIPO_COTIZANTE,
+                NCERTIFICADO,
+                PTSALARIO,
+                PTULTIMO_IBC_COTIZADO,
+                ERROR,
+                PTINGRESO_MAX_BASE_LIQ,
+                PTINGRESO_MIN_BASE_LIQ,
+                TO_CHAR(PERIODO_PROCESADO,'YYYYMM') PERIODO_PROCESADO,
+                CDTIPO_GENERACION,
+                CDTIPO_TASA,
+                SNINDICADOR_PROPORCIONAL_DIAS,
+                CDTIPO_NOVEDAD,
+                FEALTA,
+                FEBAJA,
+                ES_MISMO_PERIODO_DE_ALTA,
+                PERIODO_MENOR_FEALTA
+        FROM (
+            SELECT A.*, ROW_NUMBER() OVER (PARTITION BY DNI, CDTIPO_COTIZANTE, CDTIPO_AFILIADO  order by PRIORIDAD) rn
+            FROM AFILIADOS A
+        ) WHERE RN = 1
+    ]]>
+    </entry>
+    
+    	<entry key="actualizacion.integrador.controlestadocuenta">
+	<![CDATA[	
+	   UPDATE TCPG_CONTROL_ESTADOCUENTA
+      			 SET NMTOTAL_TRABAJADORES_INICIAL = NMTOTAL_TRABAJADORES_INICIAL + :totalTrabajadoresInicial,
+       			     NMTOTAL_TRABAJADORES = NMTOTAL_TRABAJADORES + :totalTrabajadores,
+       			     NMEXPUESTOS_INICIAL = NMEXPUESTOS_INICIAL + :expuestosInicial,		
+       				 PTVALOR_ESPERADOS_INICIAL = PTVALOR_ESPERADOS_INICIAL + :valorEsperadoInicial,
+       				 PTVALOR_ESPERADO = PTVALOR_ESPERADO + :valorEsperado
+       WHERE NMPERIODO = :periodoCotizacion AND NMPOLIZA = :poliza AND CDTIPO_AFILIADO = :tipoAfiliado
+             AND EXISTS(SELECT 1 FROM TCPG_CONTROL_ESTADOCUENTA e2 WHERE e2.NMPERIODO = :periodoCotizacion AND e2.NMPOLIZA = :poliza AND e2.CDTIPO_AFILIADO = :tipoAfiliado)	   
+	]]>
+	</entry>
+	
+	<entry key="consolidar.controlestadocuenta.excluyendoTipoCotizante">
+	<![CDATA[
+	 UPDATE tcpg_control_estadocuenta cec
+			SET
+			    ( nmtotal_trabajadores_inicial,
+			      nmtotal_trabajadores,
+			      nmexpuestos_inicial,
+			      ptvalor_esperados_inicial,
+			      ptvalor_esperado ) = (
+			        SELECT
+			            nmtotal_trabajadores_inicial,
+			            nmtotal_trabajadores_inicial   nmtotal_trabajadores,
+			            nmexpuestos_inicial,
+			            ptvalor_esperados_inicial,
+			            ptvalor_esperados_inicial      ptvalor_esperados
+			        FROM
+			            (
+			                SELECT
+			                    COUNT(1) nmtotal_trabajadores_inicial,
+			                    round(SUM(nmdias_esperados)/30, 0) nmexpuestos_inicial,
+			                    SUM(ptcotizacion_esperada) ptvalor_esperados_inicial
+			                FROM
+			                    tcpg_estado_cuenta ec
+			                WHERE
+			                    ec.nmpoliza = :poliza
+			                    AND ec.nmperiodo = :periodoCotizacion
+			                    AND ec.cdtipo_afiliado = :tipoAfiliado
+			                    AND ec.cdtipo_cotizante != :tipoCotizante
+			                GROUP BY
+			                    ec.nmpoliza,
+			                    ec.nmperiodo,
+			                    ec.cdtipo_afiliado
+			    	)
+			    )
+			WHERE
+			    nmperiodo = :periodoCotizacion
+			    AND nmpoliza = :poliza
+			    AND cdtipo_afiliado = :tipoAfiliadoControl
+		]]>
+	</entry>
+	
+	<entry key="consolidar.controlestadocuenta.tipoCotizanteOpcional">
+	<![CDATA[
+		UPDATE tcpg_control_estadocuenta cec
+			SET
+			    ( nmtotal_trabajadores_inicial,
+			      nmtotal_trabajadores,
+			      nmexpuestos_inicial,
+			      ptvalor_esperados_inicial,
+			      ptvalor_esperado ) = (
+			        SELECT
+			            nmtotal_trabajadores_inicial,
+			            nmtotal_trabajadores_inicial   nmtotal_trabajadores,
+			            nmexpuestos_inicial,
+			            ptvalor_esperados_inicial,
+			            ptvalor_esperados_inicial      ptvalor_esperados
+			        FROM
+			            (
+			                SELECT
+			                    COUNT(1) nmtotal_trabajadores_inicial,
+			                    round(SUM(nmdias_esperados)/30, 0) nmexpuestos_inicial,
+			                    SUM(ptcotizacion_esperada) ptvalor_esperados_inicial
+			                FROM
+			                    tcpg_estado_cuenta ec
+			                WHERE
+			                    ec.nmpoliza = :poliza
+			                    AND ec.nmperiodo = :periodoCotizacion
+			                    AND ec.cdtipo_afiliado = :tipoAfiliado
+			                    AND ec.cdtipo_cotizante = NVL(:tipoCotizante, ec.cdtipo_cotizante)
+			                GROUP BY
+			                    ec.nmpoliza,
+			                    ec.nmperiodo,
+			                    ec.cdtipo_afiliado,
+			                    ec.cdtipo_cotizante
+			            )
+			    )
+			WHERE
+			     nmperiodo = :periodoCotizacion
+			    AND nmpoliza = :poliza
+			    AND cdtipo_afiliado = :tipoAfiliadoControl
+	]]>
+	</entry>
+    
+</properties>

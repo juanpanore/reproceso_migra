@@ -1,0 +1,3700 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE properties SYSTEM "http://java.sun.com/dtd/properties.dtd">
+
+<properties>
+
+        <entry key="registro.detalles.est.cta.consecutivo">
+            <![CDATA[    
+                    
+        INSERT 
+           INTO TCPG_ESTADO_CUENTA_DTLLE(
+                    NMPOLIZA,
+                    DNI_AFILIADO,
+                    NMPERIODO,
+                    NMFORMULARIO_PAGO,
+                    NMDIAS_AUS,
+                    PTCOTIZACION_AUS,
+                    POTASA_AUS,
+                    PTINGRESO_BASE_LIQ_AUS,
+                    NMDIAS_LAB,
+                    PTCOTIZACION_LAB,
+                    POTASA_LAB,
+                    PTINGRESO_BASE_LIQ_LAB,
+                    CDTIPO_COTIZANTE,
+                    CDTIPO_PLANILLA,
+                    NMPLANILLA,
+                    FEPAGO,
+                    SNINGRESO,
+                    SNRETIRO,
+                    DNI_RESPONSABLE,
+                    CDSUBTIPO_COTIZANTE_REPORTADO,
+                    DNI_INGRESA,
+                    FEINGRESA,
+                    NMCONSECUTIVO,
+                    NMCONSECUTIVO_EC,
+                    CDNOVEDAD
+                )
+            SELECT :poliza,
+                DNI_AFILIADO,
+                NMPERIODO,
+                NMFORMULARIO_PAGO,
+                NMDIAS_AUS,
+                PTCOTIZACION_AUS,
+                POTASA_AUS,
+                PTINGRESO_BASE_LIQ_AUS,
+                NMDIAS_LAB,
+                PTCOTIZACION_LAB,
+                POTASA_LAB,
+                PTINGRESO_BASE_LIQ_LAB,
+                CDTIPO_COTIZANTE,
+                CDTIPO_PLANILLA,
+                NMPLANILLA,
+                FEPAGO,
+                SNINGRESO,
+                SNRETIRO,
+                DNI_RESPONSABLE,
+                CDSUBTIPO_COTIZANTE_REPORTADO,
+                DNI_INGRESA,
+                SYSDATE,
+                TCPG_ESTADO_CTA_DTLL_SEQ.NEXTVAL,
+                :consecutivo,
+                CDNOVEDAD
+            FROM TCPG_ESTADO_CUENTA_DTLLE
+                WHERE NOT EXISTS (
+                    SELECT 1 FROM TCPG_ESTADO_CUENTA_DTLLE WHERE 
+                        NMCONSECUTIVO_EC = :consecutivo
+                        AND NMPOLIZA = :poliza 
+                )
+                AND NMCONSECUTIVO_EC = :consecutivoPagado                                                  
+      
+            ]]>
+            </entry>
+
+        <entry key="consulta.pagos.otros">
+            <![CDATA[    
+                    
+                    SELECT CA.CDTIPO_PROCESO CDTIPO_PROCESO, CA.CDTIPO_PLANILLA CDTIPO_PLANILLA
+                    FROM   T094_NOVEDADES N,
+                           T094_CONTROL_AUTOLIQUIDACIONES CA
+                    WHERE  N.DNI_EMPLEADO            = :documento
+                    AND    N.TIPO_DOCUMENTO_EMPLEADO = :tipo_documento
+                    AND    N.NMPERIODO               = :periodo
+                    AND    N.NMFORMULARIO_PAGO       = CA.NMFORMULARIO_PAGO
+                    AND    N.NMPERIODO               = CA.NMPERIODO
+                    AND    CA.CDTIPO_PROCESO         = 'I'                                                       
+  
+            ]]>
+            </entry>
+            
+    <!-- NO SE UTILIZA -->
+    <entry key="consulta.resumen.novedades">
+    <![CDATA[    
+            
+        SELECT DISTINCT
+                TIPO_DOCUMENTO_EMPLEADOR, 
+                DNI_EMPLEADOR, 
+                LAST_VALUE(PTINGRESO_BASE_LIQ) OVER (PARTITION BY DNI_EMPLEADO,NMPERIODO,NMFORMULARIO_PAGO,CDTIPO_AFILIADO ORDER BY FEINGRESO) IBC_REPORTADO,
+                COUNT(TRIM(SNVCT)) OVER (PARTITION BY DNI_EMPLEADO,NMPERIODO,NMFORMULARIO_PAGO,CDTIPO_AFILIADO) TOTALNOVEDADESVCT, 
+                CDNUEVA_SUCURSAL CT,
+                FEINICIO_VCT fechaInicioVCT, 
+                FEFIN_VCT fechaFinVCT,
+                TRIM(SNVCT) SNVCT
+            FROM T094_NOVEDADES n
+            WHERE DNI_EMPLEADO = :dni 
+                AND NMPERIODO = :periodo
+                AND NMFORMULARIO_PAGO = :numeroFormulario
+                AND CDTIPO_AFILIADO = :tipoCotizante
+    ]]>
+    </entry>
+
+    <entry key="consulta.estado.cuenta.coberturas">
+    <![CDATA[    
+        WITH DATOS_PERIODO AS(
+            SELECT
+                TO_CHAR( :fechaProceso , 'YYYYMM' ) PERIODO,
+                :fechaProceso FEEJECUTA_PROCESO
+            FROM
+                DUAL
+        ),
+        TOTAL_DIAS_MES AS(
+            SELECT
+                (
+                    TRUNC( TO_DATE( DP.PERIODO, 'YYYYMM' ), 'MON' )+ rownum - 1
+                ) DIA_DEL_MES
+            FROM
+                DATOS_PERIODO DP
+            WHERE
+                DP.PERIODO = TO_CHAR( TRUNC( TO_DATE( DP.PERIODO, 'YYYYMM' ), 'MON' )+ rownum - 1, 'YYYYMM' )
+            CONNECT BY
+                LEVEL <= 31
+            ORDER BY
+                DIA_DEL_MES
+        ),
+        TOTAL_FESTIVOS_MES AS(
+            SELECT
+                DF.FEFESTIVO
+            FROM
+                T094_DIAS_FESTIVOS DF,
+                DATOS_PERIODO DP
+            WHERE
+                DF.FEFESTIVO <= LAST_DAY( TO_DATE( DP.PERIODO, 'YYYYMM' ))
+                AND DF.FEFESTIVO >= TO_DATE( DP.PERIODO, 'YYYYMM' )
+        ),
+        TOTAL_HABILES_MES AS(
+            SELECT
+                TDM.DIA_DEL_MES,
+                ROW_NUMBER() OVER(
+                ORDER BY
+                    TDM.DIA_DEL_MES
+                ) NUMERO_DIA
+            FROM
+                TOTAL_DIAS_MES TDM
+            WHERE
+                TDM.DIA_DEL_MES NOT IN(
+                    SELECT
+                        TFM.FEFESTIVO
+                    FROM
+                        TOTAL_FESTIVOS_MES TFM
+                )
+            ORDER BY
+                TDM.DIA_DEL_MES
+        ),
+        POLIZAS AS(
+            SELECT
+                DISTINCT(EC.NMPOLIZA),
+                DP.PERIODO,
+                THM.DIA_DEL_MES FELIMITE_PAGO,
+                THM.NUMERO_DIA,
+                DP.FEEJECUTA_PROCESO
+            FROM
+                DATOS_PERIODO DP,
+                TCPG_ESTADO_CUENTA EC,
+                TCPG_NOTIFICA_FECHA_PAGO NFP,
+                TOTAL_HABILES_MES THM
+            WHERE
+                DP.PERIODO = EC.NMPERIODO_GENERACION
+                AND EC.NMPOLIZA = NFP.NMPOLIZA
+                AND EC.NMPERIODO = NFP.NMPERIODO
+                AND THM.DIA_DEL_MES = NFP.FELIMITE_PAGO
+        ) SELECT
+            P.NMPOLIZA,
+            P.PERIODO,
+            P.FELIMITE_PAGO,
+            THM.DIA_DEL_MES AS FEPROCESAR_ENR
+        FROM
+            POLIZAS P,
+            TOTAL_HABILES_MES THM
+        WHERE
+            THM.NUMERO_DIA IN(
+                P.NUMERO_DIA +:rango
+            )
+            AND THM.DIA_DEL_MES = P.FEEJECUTA_PROCESO
+    ]]>
+    </entry>
+    
+    <entry key="consulta.estados.cuenta.afiliado">
+    <![CDATA[   
+           SELECT 
+               EC.NMPOLIZA,
+               EC.CDTIPO_COTIZANTE,
+               EC.CDTIPO_AFILIADO,
+               EC.PTCOTIZACION_ESPERADA,
+               EC.PTINGRESO_BASE_LIQ_ESPERADO,
+               EC.POTASA_ESPERADA,
+               EC.NMDIAS_ESPERADOS,
+               EC.SNEXISTE_PAGO,
+               EC.PTCOTIZACION_REPORTADA,
+               EC.PTINGRESO_BASE_LIQ_REPORTADO,
+               EC.NMDIAS_REPORTADOS,
+               EC.POTASA_REPORTADA,
+               EC.CDESTADO_PAGO,
+               EC.NMCONSECUTIVO
+          FROM TCPG_ESTADO_CUENTA EC
+         WHERE DNI_AFILIADO = :dni
+         AND EC.NMPERIODO = :nmperiodo 
+         AND EC.CDTIPO_AFILIADO =  NVL(:tipoAfiliado,EC.CDTIPO_AFILIADO)
+            
+      ]]>
+    </entry>
+    
+    <entry key="marcar.pago.estados.cuenta.afiliado">
+    <![CDATA[
+        UPDATE TCPG_ESTADO_CUENTA EC
+           SET EC.PTINGRESO_BASE_LIQ_ESPERADO  = :ibc,
+               EC.PTCOTIZACION_ESPERADA        = :cotizacion,
+               EC.SNEXISTE_PAGO                = :existePago,
+               EC.PTCOTIZACION_REPORTADA       = :cotizacionReportada,
+               EC.PTINGRESO_BASE_LIQ_REPORTADO = :ibcReportado,
+               EC.NMDIAS_REPORTADOS            = :diasReportados,
+               EC.POTASA_REPORTADA             = :tasaReportada,
+               EC.FEMODIFICA                   = SYSDATE,
+               EC.DNI_MODIFICA                 = :dniModifica,
+               EC.DSOBSERVACIONES              = CONCAT(EC.DSOBSERVACIONES,
+                                                        CONCAT(CONCAT(' - Se marca pagado porque ingresa otro pago en el formulario ',
+                                                                      :formularioPago),
+                                                               ' de otra cobertura como independiente')),
+               EC.CDESTADO_PAGO                = :estadoPago,
+               EC.PTSALDO                      = :saldo
+         WHERE DNI_AFILIADO = :dni
+           AND EC.NMPERIODO = :nmperiodo
+           AND EC.CDTIPO_AFILIADO = NVL(:tipoAfiliado, EC.CDTIPO_AFILIADO)
+           AND EC.NMPOLIZA = :poliza
+           AND ((:tipoCotizante = '23' AND EC.CDTIPO_AFILIADO = :tipoAfiliado AND
+               EC.CDTIPO_COTIZANTE = :tipoCotizante) OR
+               (:tipoCotizante <> '23' AND EC.CDTIPO_AFILIADO = :tipoAfiliado AND
+               EC.CDTIPO_COTIZANTE <> '23'))
+     ]]>
+    </entry>
+    
+
+    <entry key="marcar.pago.estado.cuenta.afiliados">
+    <![CDATA[    
+      MERGE INTO
+       TCPG_ESTADO_CUENTA EC2
+        USING(
+        SELECT
+            EC.DNI_AFILIADO,
+            EC.CDTIPO_COTIZANTE,
+            EC.NMPERIODO,
+            EC.NMPOLIZA,
+            (
+                SELECT
+                    DECODE( COUNT( 1 ), 0, 'N', 'S' )
+                FROM
+                    T094_CONTROL_AUTOLIQUIDACIONES CA,
+                    T094_NOVEDADES N
+                WHERE
+                    CA.NPOLIZA = EC.NMPOLIZA
+                    AND CA.NPOLIZA = :poliza
+                    AND CA.NMPERIODO = TO_CHAR( TO_DATE( EC.NMPERIODO, 'YYYYMM' ), 'MMYYYY' )
+                    AND CA.NMFORMULARIO_PAGO = N.NMFORMULARIO_PAGO
+                    AND N.NMPERIODO = CA.NMPERIODO
+                    AND N.DNI_EMPLEADO = SUBSTR( EC.DNI_AFILIADO, 2 )
+                    AND N.TIPO_DOCUMENTO_EMPLEADO = SUBSTR( EC.DNI_AFILIADO, 1,1 )
+                    AND N.CDTIPO_AFILIADO = EC.CDTIPO_COTIZANTE
+            ) TIENE_PAGO
+        FROM
+            TCPG_ESTADO_CUENTA EC
+        WHERE
+            EC.NMPOLIZA =:poliza
+            AND EC.NMPERIODO_GENERACION = TO_CHAR( :fechaProceso, 'YYYYMM' )
+            AND EC.SNEXISTE_PAGO = 'N'
+    ) EC1 ON
+    (
+        EC2.DNI_AFILIADO = EC1.DNI_AFILIADO
+        AND EC2.CDTIPO_COTIZANTE = EC1.CDTIPO_COTIZANTE
+        AND EC2.NMPERIODO = EC1.NMPERIODO
+        AND EC2.NMPOLIZA = EC1.NMPOLIZA
+    )
+    WHEN MATCHED THEN UPDATE
+    SET
+        EC2.SNEXISTE_PAGO = EC1.TIENE_PAGO,
+        FEMODIFICA = SYSDATE,
+        DNI_MODIFICA =:dniModifica
+    ]]>
+    </entry>
+
+    <entry key="marcar.pago.estado.cuenta.afiliado">
+    <![CDATA[
+   MERGE INTO
+    TCPG_ESTADO_CUENTA EC2
+        USING(
+                SELECT DISTINCT
+                 EC.DNI_AFILIADO,
+                 EC.CDTIPO_COTIZANTE,
+                 EC.NMPERIODO,
+                 EC.NMPOLIZA,
+                 (
+                    SELECT
+                        DECODE( COUNT( 1 ), 0, 'N', 'S' )
+                    FROM
+                        T094_NOVEDADES N
+                    WHERE
+                        N.NMPERIODO = TO_CHAR( TO_DATE( EC.NMPERIODO, 'YYYYMM' ), 'MMYYYY' )
+                        AND N.NMFORMULARIO_PAGO = :numFormulario
+                        AND N.DNI_EMPLEADO = SUBSTR( EC.DNI_AFILIADO, 2 )
+                        AND N.TIPO_DOCUMENTO_EMPLEADO = SUBSTR( EC.DNI_AFILIADO, 1,1 )
+                        AND N.CDTIPO_AFILIADO = EC.CDTIPO_COTIZANTE
+                ) TIENE_PAGO                
+                FROM
+                TCPG_ESTADO_CUENTA EC
+             WHERE
+                EC.NMPOLIZA =:poliza
+                AND EC.NMPERIODO = TO_CHAR( TO_DATE( :periodo, 'MMYYYY' ), 'YYYYMM' ) 
+                AND EC.DNI_AFILIADO = :dniAfiliado
+                AND EC.CDTIPO_COTIZANTE IN (SELECT CDTIPO_COTIZANTE FROM TCPG_CONDICIONES_COTIZA where CDTIPO_AFILIADO = :tipoAfiliado)
+                AND EC.SNEXISTE_PAGO = 'N'
+       ) EC1  ON
+    (
+        EC2.DNI_AFILIADO = EC1.DNI_AFILIADO
+        AND EC2.CDTIPO_COTIZANTE = EC1.CDTIPO_COTIZANTE
+        AND EC2.NMPERIODO = EC1.NMPERIODO
+        AND EC2.NMPOLIZA = EC1.NMPOLIZA
+    )
+    WHEN MATCHED THEN UPDATE
+    SET
+        EC2.SNEXISTE_PAGO = EC1.TIENE_PAGO,
+        FEMODIFICA = SYSDATE,
+        DNI_MODIFICA =:dniModifica
+    ]]>
+    </entry>
+
+    <entry key="consulta.estado.cuenta.afiliados.periodo">
+    <![CDATA[    
+        SELECT
+            ec.DNI_AFILIADO, ec.NMPOLIZA
+        FROM
+            TCPG_ESTADO_CUENTA ec
+        WHERE
+            ec.FEALTA <= LAST_DAY( TO_DATE(:periodo, 'YYYYMM' ))
+            AND ec.FEBAJA >= TO_DATE(:periodo, 'YYYYMM' )
+    ]]>
+    </entry>
+
+
+    <!-- En novedades el campo CDTIPO_AFILIADO, refiere realmente al tipo cotizante, 
+        esto es un error de la tabla pero toca convivir con este. -->
+    <entry key="consulta.afiliadosXformulario">
+    <![CDATA[
+        SELECT DISTINCT
+            N.NMPERIODO PERIODO,
+            N.TIPO_DOCUMENTO_EMPLEADO||N.DNI_EMPLEADO DNI,
+            N.CDTIPO_AFILIADO tipoCotizante,
+            N.CDSUBTIPO_COTIZANTE subtipoCotizante,
+            CN.NPOLIZA,
+            N.TIPO_DOCUMENTO_EMPLEADOR tipoDocEmpleador,
+            N.DNI_EMPLEADOR dniEmpleador,
+            CC.PTINGRESO_MAX_BASE_LIQ,
+            CC.PTINGRESO_MIN_BASE_LIQ,
+            CC.CDTIPO_GENERACION,
+            CC.CDTIPO_TASA,
+            CC.SNINDICADOR_PROPORCIONAL_DIAS,
+            CC.CDTIPO_NOVEDAD,
+            CC.CDTIPO_AFILIADO,
+            NVL(CA.CDTIPO_PLANILLA,'E') CDTIPO_PLANILLA,
+            CA.CDTIPO_PROCESO,
+            MIN(N.CDNUEVA_SUCURSAL) CT,
+            MIN(N.FEINICIO_VCT) fechaInicioVCT, 
+            MAX(N.FEFIN_VCT) fechaFinVCT,
+            MAX(DECODE(N.SNVCT,'S','X',N.SNVCT)) SNVCT
+         FROM T094_CONTROL_NOVEDADES CN
+            INNER JOIN T094_CONTROL_AUTOLIQUIDACIONES CA ON CA.NMFORMULARIO_PAGO = CN.NMFORMULARIO_PAGO
+            INNER JOIN T094_NOVEDADES N ON CN.NMFORMULARIO_PAGO = N.NMFORMULARIO_PAGO
+            LEFT JOIN TCPG_CONDICIONES_COTIZA CC ON CC.CDTIPO_COTIZANTE = N.CDTIPO_AFILIADO
+         WHERE 
+            --NVL(CN.SNPROCESADO, 'N') = 'N' AND
+            NVL(N.SNPROCESADO, 'N') = 'N'
+            AND N.NMFORMULARIO_PAGO = :numeroFormulario
+            --AND N.DNI_EMPLEADO IN ('53032437')
+            GROUP BY N.NMPERIODO,
+                N.TIPO_DOCUMENTO_EMPLEADO||N.DNI_EMPLEADO,
+                N.CDTIPO_AFILIADO,
+                N.CDSUBTIPO_COTIZANTE,
+                CN.NPOLIZA,
+                N.TIPO_DOCUMENTO_EMPLEADOR,
+                N.DNI_EMPLEADOR,
+                CC.PTINGRESO_MAX_BASE_LIQ,
+                CC.PTINGRESO_MIN_BASE_LIQ,
+                CC.CDTIPO_GENERACION,
+                CC.CDTIPO_TASA,
+                CC.SNINDICADOR_PROPORCIONAL_DIAS,
+                CC.CDTIPO_NOVEDAD,
+                CC.CDTIPO_AFILIADO,
+                NVL(CA.CDTIPO_PLANILLA,'E'),
+                CA.CDTIPO_PROCESO    
+    ]]>
+   </entry>
+
+   <entry key="actualizar.item.estado.cuenta">
+    <![CDATA[
+        UPDATE TCPG_ESTADO_CUENTA
+        SET NMDIAS_ESPERADOS = :diasEsperados,
+            PTCOTIZACION_ESPERADA = :cotizacionEsperada,
+            PTINGRESO_BASE_LIQ_ESPERADO = :ibcEsperado
+        WHERE
+            DNI_AFILIADO = :dniEmpleado
+            AND NMPERIODO = :periodo
+            AND NMPOLIZA = :poliza
+            AND CDTIPO_COTIZANTE = :tipoCotizante
+            AND (:diasEsperados,:cotizacionEsperada,:ibcEsperado)
+                NOT IN (
+                    SELECT NMDIAS_ESPERADOS,PTCOTIZACION_ESPERADA,PTINGRESO_BASE_LIQ_ESPERADO 
+                    FROM TCPG_ESTADO_CUENTA
+                    WHERE DNI_AFILIADO = :dniEmpleado
+                        AND NMPERIODO = :periodo
+                )
+    ]]>
+   </entry>
+   
+   <entry key="actualizar.item.estado.cuenta.nuevo">
+    <![CDATA[
+        UPDATE TCPG_ESTADO_CUENTA
+        SET NMDIAS_ESPERADOS = :diasEsperados,
+            PTCOTIZACION_ESPERADA = :cotizacionEsperada,
+            PTINGRESO_BASE_LIQ_ESPERADO = :ibcEsperado,
+            PTCOTIZACION_REPORTADA = :cotizacionReportada,
+            POTASA_REPORTADA = :tasaReportada,
+            PTINGRESO_BASE_LIQ_REPORTADO = :ibcReportado,
+            NMDIAS_REPORTADOS = :diasReportados,
+            DNI_MODIFICA = :dniModifica,
+            FEMODIFICA = sysdate,
+            CDESTADO_PAGO = :estadoPago,
+            PTSALDO = :saldo,
+            SNEXISTE_PAGO = :tienePago,
+            CDSUCURSAL = :centroTrabajo,
+            CDSUCURSAL_PAGADORA = :centroTrabajoPagador,
+            POTASA_ESPERADA = :tasa
+        WHERE
+            DNI_AFILIADO = :dniEmpleado
+            AND NMPERIODO = :periodo
+            AND NMPOLIZA = :poliza
+            AND (
+                (:tipoCotizante='23' AND CDTIPO_AFILIADO=:tipoAfiliado AND CDTIPO_COTIZANTE = :tipoCotizante)
+                OR
+                (:tipoCotizante<>'23' AND  CDTIPO_AFILIADO=:tipoAfiliado AND CDTIPO_COTIZANTE <> '23')
+            ) 
+    ]]>
+   </entry>
+
+   <entry key="ingresar.renes.segun.legalizacion">
+    <![CDATA[
+        INSERT 
+        INTO TCPG_RENES
+          (NPOLIZA,
+           DNI_EMPLEADO,
+           NMPERIODO,
+           CDPUNTO_PAGO,
+           DSNOMBRE_EMPLEADO,
+           NMDIAS_COTIZADOS,
+           SNCORRECTO,
+           SNPERSONAS,
+           SNACTUALIZA,
+           SNMARCA_CARTA,
+           FEPROCESO_CARGA,
+           FEINGRESO,
+           DNI_INGRESA,
+           NMFORMULARIO_PAGO,
+           CDSUCURSAL,
+           FEINGRESO_AFILIADO,
+           CDSUCURSAL_PAGADORA,
+           POCOTIZACION_ATEP,
+           PTCOTIZACION,
+           PTINGRESO_BASE_LIQ,
+           PTSALARIO,
+           SNING,
+           SNRET,
+           SNGESTION,
+           CDFUENTE_PROCESO,
+           CDTIPO_COTIZANTE,
+           CDTIPO_AFILIADO)
+        SELECT Z.*
+      FROM (
+SELECT N.NPOLIZA,
+                   N.TIPO_DOCUMENTO_EMPLEADO||N.DNI_EMPLEADO DNI_EMPLEADO,
+                   SUBSTR(N.NMPERIODO, 3, 4)|| SUBSTR(N.NMPERIODO, 1, 2) PERIODO,
+                   N.CDPUNTO_PAGO,
+                   MAX(N.NOMBRE) NOMBRE ,
+                   SUM(N.NMDIAS_COTIZADOS) NMDIAS_COTIZADOS,
+                   'N' SNCORRECTO,
+                   'S' SNPERSONAS,
+                   'N' SNACTUALIZA,
+                   'N' SNMARCA_CARTA,
+                   SYSDATE FEPROCESO_CARGA,
+                   SYSDATE FEINGRESO,
+                   :usuarioOperacion USUARIO,
+                   A.NMFORMULARIO_PAGO,
+                   MIN(N.CDNUEVA_SUCURSAL) CDNUEVA_SUCURSAL,
+                   MIN(N.FEINGRESO) d1,
+                   MIN(A.CDSUCURSAL_PAGADORA)  d2,
+                   MAX(N.POCOTIZACION_ATEP) d3,
+                   SUM(N.PTCOTIZACION)  d4,
+                   SUM(N.PTINGRESO_BASE_LIQ) d5,
+                   MAX(N.PTSALARIO_BASICO) PTSALARIO_BASICO,
+                   MAX(N.SNING) SNING,
+                   MAX(N.SNRET) SNRET,
+                   'N' SNGESTION,
+                   '92' CDFUENTE_PROCESO,
+                   N.CDTIPO_AFILIADO tipoCotizante,
+                   DECODE(A.CDTIPO_PLANILLA,
+                          'I',
+                          '02',
+                          'Y',
+                          '02',
+                          'N',
+                          DECODE(A.CDTIPO_PROCESO, 'I', '02', '01'),
+                          'A',
+                          DECODE(A.CDTIPO_PROCESO, 'I', '02', '01'),
+                          'M',
+                          DECODE(A.CDTIPO_PROCESO, 'I', '02', '01'),
+                          '01') tipoAfiliado
+              FROM T094_NOVEDADES N
+             INNER JOIN T094_CONTROL_AUTOLIQUIDACIONES A
+                ON A.NMFORMULARIO_PAGO = N.NMFORMULARIO_PAGO
+               AND A.NMFORMULARIO_PAGO = :formulario
+             WHERE N.DNI_EMPLEADO = SUBSTR(:dniAfiliado, 2)
+              AND N.TIPO_DOCUMENTO_EMPLEADO = SUBSTR(:dniAfiliado, 1,1)
+              AND N.CDTIPO_AFILIADO = NVL(:tipoCotizante,N.CDTIPO_AFILIADO) --?preguntar por q estaba comentariado
+             -- AND N.CDTIPO_AFILIADO IN (SELECT CDTIPO_COTIZANTE FROM TCPG_CONDICIONES_COTIZA where CDTIPO_AFILIADO = NVL(:tipoAfiliado, CDTIPO_AFILIADO)
+               AND NOT EXISTS
+             (SELECT 1
+                      FROM TCPG_RENES R
+                     WHERE R.NPOLIZA = A.NPOLIZA
+                       AND R.NMPERIODO =
+                           CONCAT(SUBSTR(N.NMPERIODO, 3, 4),
+                                  SUBSTR(N.NMPERIODO, 1, 2))
+                       AND R.DNI_EMPLEADO = :dniAfiliado
+                       AND N.TIPO_DOCUMENTO_EMPLEADO = SUBSTR(:dniAfiliado, 1,1)
+                       AND R.NMFORMULARIO_PAGO = :formulario
+                       AND R.CDTIPO_COTIZANTE =  N.CDTIPO_AFILIADO
+                    --   AND R.CDTIPO_COTIZANTE IN (SELECT CDTIPO_COTIZANTE FROM TCPG_CONDICIONES_COTIZA where CDTIPO_AFILIADO = :tipoAfiliado)
+                    )
+              AND NOT EXISTS
+              (SELECT 1
+                      FROM TCPG_ESTADO_CUENTA E
+                      WHERE E.NMPOLIZA = A.NPOLIZA
+                        AND E.NMPERIODO = CONCAT(SUBSTR(N.NMPERIODO, 3, 4),
+                                                 SUBSTR(N.NMPERIODO, 1, 2))
+                        AND E.DNI_AFILIADO = :dniAfiliado
+                        AND ((:tipoCotizante='23' AND E.CDTIPO_AFILIADO=:tipoAfiliado AND E.CDTIPO_COTIZANTE =:tipoCotizante)
+                                                                                                                                 
+                          OR (:tipoCotizante<>'23' AND  E.CDTIPO_AFILIADO=:tipoAfiliado AND E.CDTIPO_COTIZANTE <> '23')))                        
+                      
+              GROUP BY N.NPOLIZA,
+                   N.TIPO_DOCUMENTO_EMPLEADO||N.DNI_EMPLEADO ,
+                  SUBSTR(N.NMPERIODO, 3, 4)|| SUBSTR(N.NMPERIODO, 1, 2) ,
+                   N.CDPUNTO_PAGO,
+                   A.NMFORMULARIO_PAGO, N.CDTIPO_AFILIADO,
+                   DECODE(A.CDTIPO_PLANILLA,'I', '02','Y','02','N',
+                          DECODE(A.CDTIPO_PROCESO, 'I', '02', '01'),
+                          'A', DECODE(A.CDTIPO_PROCESO, 'I', '02', '01'),
+                          'M', DECODE(A.CDTIPO_PROCESO, 'I', '02', '01'),'01'))  Z
+          WHERE rownum = 1
+    ]]>
+   </entry>
+
+   <entry key="registro.campoactualizado">
+    <![CDATA[
+           insert into TCPG_TRAZA_ESTADO_CUENTA 
+           (NMCONSECUTIVO,NMPERIODO,DNI_AFILIADO,DSCAMPO_ACTUALIZADO,DSVALOR_NUEVO,DSVALOR_ANTERIOR,DNI_INGRESA,FEINGRESA,NMPOLIZA, CDTIPO_COTIZANTE, CDTIPO_AFILIADO)
+           values (SEQ_CPG_TRAZA_ESTADO_CUENTA.NEXTVAL,:periodo,:dni,:campo,:valorNuevo,:valorViejo,:dniIngresa,SYSDATE,:poliza,:tipoCotizante,:tipoAfiliado)           
+    ]]>
+   </entry>
+
+   <entry key="consulta.estado.cuenta.xAfiliadoPeriodo">
+    <![CDATA[
+        SELECT
+        DISTINCT
+        NMPOLIZA,
+        CDTIPO_COTIZANTE,
+        CDTIPO_AFILIADO,
+        NMDIAS_ESPERADOS,
+        PTCOTIZACION_ESPERADA,
+        PTINGRESO_BASE_LIQ_ESPERADO,
+        PTSALARIO,
+        CDSUCURSAL,
+        CDSUCURSAL_PAGADORA,
+        POTASA_ESPERADA,
+        SNEXISTE_PAGO,
+        CDESTADO_PAGO,
+        NMCONSECUTIVO
+    FROM
+        TCPG_ESTADO_CUENTA
+    WHERE
+        DNI_AFILIADO = :dni
+        AND NMPERIODO = :periodo
+        AND NMPOLIZA = :poliza
+        AND (
+            (:tipoCotizante='23' AND CDTIPO_AFILIADO=:tipoAfiliado AND CDTIPO_COTIZANTE = :tipoCotizante)
+            OR
+            (:tipoCotizante<>'23' AND  CDTIPO_AFILIADO=:tipoAfiliado AND CDTIPO_COTIZANTE <> '23')
+            )
+    ]]>
+   </entry>
+   
+   <entry key="buscar.formularios.pendientes.reproceso">
+    <![CDATA[
+        SELECT NMFORMULARIO_PAGO FROM t094_control_novedades 
+        WHERE SNPROCESADO <> 'S' AND FEINGRESA > SYSDATE - 5
+    ]]>
+    </entry>
+    
+    <entry key="actualizar.estadoCarga.controlNovedades">
+    <![CDATA[
+        UPDATE t094_control_novedades 
+            SET SNPROCESADO = :estado,
+            nmregistros_buenos = :registrosBuenos,
+            nmregistros_malos = :registrosMalos,
+            total_ibc = :totalIbc
+        WHERE NMFORMULARIO_PAGO = :numeroFormulario
+    ]]>
+    </entry>
+    
+    <entry key="actualizar.estadoCarga.afiliado.novedades">
+    <![CDATA[
+        UPDATE t094_novedades SET SNPROCESADO = :estado
+        WHERE NMPERIODO = :periodo 
+            AND DNI_EMPLEADO = :numeroDocumento
+            AND TIPO_DOCUMENTO_EMPLEADO = :tipoDocumento 
+            AND NPOLIZA = :poliza
+            AND NMFORMULARIO_PAGO = :formulario
+    ]]>
+    </entry>
+    
+    <entry key="obtener.coberturas.cantidad.notificacion.empresas">
+      <![CDATA[
+        SELECT COUNT(1)
+            FROM
+            T094_CUERPOLIZA CP
+            WHERE CP.FEALTA <= LAST_DAY( TO_DATE(:periodo, 'YYYYMM' ))
+            AND CP.FEBAJA >= TO_DATE(:periodo, 'YYYYMM' )
+            AND CP.FEALTA <> CP.FEBAJA
+            AND NOT EXISTS( SELECT 1 FROM TCPG_NOTIFICA_FECHA_PAGO FP WHERE FP.NMPOLIZA =  CP.NPOLIZA AND FP.NMPERIODO = :periodo)
+            AND NOT EXISTS( SELECT 1 FROM T094_CONTROL_AUTOLIQUIDACIONES LQ WHERE LQ.NPOLIZA = CP.NPOLIZA AND LQ.NMPERIODO = CONCAT(SUBSTR(:periodo,-2,2),SUBSTR(:periodo,0,4)) AND LQ.CDTIPO_PLANILLA='E')
+            AND NVL(SNAFILIADA,'S') = 'S'
+            AND NVL(CP.CDTIPO_POLIZA,'E') = 'E'
+     ]]>
+    </entry>
+    
+    <entry key="obtener.coberturas.notificacion.empresas">
+      <![CDATA[
+      SELECT * FROM(
+          SELECT
+              CP.NPOLIZA,
+              ROW_NUMBER() over ( order by NPOLIZA DESC) ROW_NUM
+          FROM
+              T094_CUERPOLIZA CP
+          WHERE
+              CP.FEALTA <= LAST_DAY( TO_DATE(:periodo, 'YYYYMM' ))
+              AND CP.FEBAJA >= TO_DATE(:periodo, 'YYYYMM' )
+              AND CP.FEALTA <> CP.FEBAJA
+              AND NOT EXISTS( SELECT 1 FROM TCPG_NOTIFICA_FECHA_PAGO FP WHERE FP.NMPOLIZA =  CP.NPOLIZA AND FP.NMPERIODO = :periodo)
+              AND NOT EXISTS( SELECT 1 FROM T094_CONTROL_AUTOLIQUIDACIONES LQ WHERE LQ.NPOLIZA = CP.NPOLIZA AND LQ.NMPERIODO = CONCAT(SUBSTR(:periodo,-2,2),SUBSTR(:periodo,0,4)) AND LQ.CDTIPO_PLANILLA='E')
+              AND NVL(SNAFILIADA,'S') = 'S'
+              AND NVL(CP.CDTIPO_POLIZA,'E') = 'E'
+              ORDER BY CP.NPOLIZA DESC
+      ) W --WHERE W.ROW_NUM >= (:offset + 1) and W.ROW_NUM  < (:offset + :batchSize + 1)
+    ]]>
+    </entry>
+    
+    <entry key="obtener.coberturas.cantidad.notificacion.voluntarios">
+      <![CDATA[
+        SELECT COUNT(1)
+            FROM
+            T094_CUERPOLIZA CP
+            WHERE CP.FEALTA <= LAST_DAY( TO_DATE(:periodo, 'YYYYMM' ))
+            AND CP.FEBAJA >= TO_DATE(:periodo, 'YYYYMM' )
+            AND CP.FEALTA <> CP.FEBAJA
+            AND NOT EXISTS( SELECT 1 FROM TCPG_NOTIFICA_FECHA_PAGO FP WHERE FP.NMPOLIZA =  CP.NPOLIZA AND FP.NMPERIODO = :periodo)
+            AND NOT EXISTS( SELECT 1 FROM T094_CONTROL_AUTOLIQUIDACIONES LQ WHERE LQ.NPOLIZA = CP.NPOLIZA AND LQ.NMPERIODO = CONCAT(SUBSTR(:periodo,-2,2),SUBSTR(:periodo,0,4)))
+            AND NVL(CP.CDTIPO_POLIZA,'E') = 'V'
+    ]]>
+    </entry>
+    
+    <entry key="obtener.coberturas.notificacion.voluntarios">
+      <![CDATA[
+      SELECT * FROM(
+        SELECT
+            CP.NPOLIZA,
+            ROW_NUMBER() over ( order by NPOLIZA DESC) ROW_NUM
+            FROM
+            T094_CUERPOLIZA CP
+            WHERE CP.FEALTA <= LAST_DAY( TO_DATE(:periodo, 'YYYYMM' ))
+            AND CP.FEBAJA >= TO_DATE(:periodo, 'YYYYMM' )
+            AND CP.FEALTA <> CP.FEBAJA
+            AND NOT EXISTS( SELECT 1 FROM TCPG_NOTIFICA_FECHA_PAGO FP WHERE FP.NMPOLIZA =  CP.NPOLIZA AND FP.NMPERIODO = :periodo)
+            AND NOT EXISTS( SELECT 1 FROM T094_CONTROL_AUTOLIQUIDACIONES LQ WHERE LQ.NPOLIZA = CP.NPOLIZA AND LQ.NMPERIODO = CONCAT(SUBSTR(:periodo,-2,2),SUBSTR(:periodo,0,4)))
+            AND NVL(CP.CDTIPO_POLIZA,'E') = 'V'
+            ORDER BY CP.NPOLIZA DESC
+      ) W --WHERE W.ROW_NUM >= (:offset + 1) and W.ROW_NUM  < (:offset + :batchSize + 1)
+    ]]>
+    </entry>
+    
+    <entry key="obtener.coberturas.notificacionFechaLimitePago">
+      <![CDATA[
+      SELECT *
+          FROM (SELECT CP.NPOLIZA, 
+                NVL(CP.SNAFILIADA, 'S') SNAFILIACION, 
+                NVL(CP.CDTIPO_POLIZA, 'E') TIPOPOLIZA
+                FROM T094_CUERPOLIZA CP
+                WHERE CP.FEALTA <= LAST_DAY(TO_DATE(:periodo, 'YYYYMM'))
+                   AND CP.FEBAJA >= TO_DATE(:periodo, 'YYYYMM')
+                   AND CP.FEALTA <> CP.FEBAJA
+                   AND NOT EXISTS (SELECT 1
+                          FROM TCPG_NOTIFICA_FECHA_PAGO FP
+                         WHERE FP.NMPOLIZA = CP.NPOLIZA
+                           AND FP.NMPERIODO = :periodo)
+                 ORDER BY CP.NPOLIZA DESC)
+    ]]>
+    </entry>
+    
+    
+    <entry key="obtener.fechaLimitePago.polizaXPeriodo">
+    <![CDATA[
+      select PKGAFI_FUNCIONES_OPERACIONES.FUNAFI_FECHA_LIMITE_PAGO(:poliza,:periodo) as fechaLimitePago from dual
+    ]]>        
+    </entry>
+    
+    <entry key="consulta.parametro.codigo">
+    <![CDATA[
+      SELECT DSVALOR valor FROM TREC_PARAMETROS WHERE CDCODIGO = :codigo            
+    ]]>
+    </entry>
+
+    <!--  QUERIES -->
+    <entry key="consulta.contenido.query">
+    <![CDATA[
+        SELECT DSCONTENIDO CONTENIDO FROM TREC_QUERIES_PROCESO WHERE DSQUERY_ID = :queryid
+    ]]>
+    </entry>
+    
+    <!-- NOTIFICACIÓN LIMITE PAGO -->
+    <entry key="consulta.validacion.diafestivo">
+    <![CDATA[
+      SELECT DF.FEFESTIVO
+          FROM T094_DIAS_FESTIVOS DF WHERE DF.FEFESTIVO =:fecha         
+    ]]>
+    </entry>
+    
+    <entry key="actualizacion.notificacion.limitePago">
+    <![CDATA[
+      UPDATE TCPG_NOTIFICA_FECHA_PAGO TNFP SET TNFP.DSESTADO =:estado, TNFP.FEMODIFICA = sysdate, TNFP.DNI_MODIFICA =:usuarioRegistro, TNFP.FENOTIFICACION =:fechaNotificacion, TNFP.DSNOMBRE_ARCHIVO = :nombreArchivo, TNFP.DSEMAIL = :correoNotificacion, TNFP.DSNOMBRE = :nombreAfiliado, TNFP.DNI_APORTANTE = :dniAportante WHERE TNFP.NMCONSECUTIVO =:consecutivo
+    ]]>
+    </entry>
+    
+    <entry key="ingreso.notificacion.limitePago">
+    <![CDATA[
+      INSERT INTO TCPG_NOTIFICA_FECHA_PAGO(NMCONSECUTIVO, NMPOLIZA, NMPERIODO, DSESTADO, FELIMITE_PAGO, FEINGRESA, DNI_INGRESA) 
+             VALUES (SEQ_CPG_NOTIFICA_FECHA_PAGO.NEXTVAL, :poliza, :periodo, :estado, :fechaLimitePago, sysdate, :usuarioRegistro) 
+    ]]>
+    </entry>
+    
+    <entry key="consulta.notificaciones.anticipadas">
+    <![CDATA[       
+      WITH NOTIFICACIONES AS (
+           SELECT TNFP.NMCONSECUTIVO,
+                  TNFP.NMPOLIZA
+                  FROM TCPG_NOTIFICA_FECHA_PAGO TNFP 
+                      WHERE TNFP.FELIMITE_PAGO = :fechaLimitePago 
+                      AND TNFP.NMPERIODO =:periodoPago        
+                      AND TNFP.DSESTADO = 'NUEVO'
+                      AND NOT EXISTS (SELECT 1 FROM TCPG_EXCLU_NOTIFIC_FEPAGO E WHERE E.NMPOLIZA = TNFP.NMPOLIZA AND E.FEBAJA IS NULL)
+      ),
+      COBERTURAS_NOTIFICACION AS (
+          SELECT NT.*,
+                 CP.DSCOMERCIAL, 
+                 CP.DNI,
+                 COALESCE(EMAIL_NOMINA, EMAIL_SALUD_OC, EMAIL_GERENTE) DSEMAIL,          
+                 (SELECT PKGAFI_FUNCIONES_OPERACIONES.FUNAFI_TOTAL_AFILIADOS(CP.NPOLIZA,:periodoPago) as totalAfiliados from dual) NROAFILIADOS
+                 FROM T094_CUERPOLIZA CP INNER JOIN NOTIFICACIONES NT ON CP.NPOLIZA = NT.NMPOLIZA
+                            AND CP.FEALTA <= LAST_DAY( TO_DATE(:periodoPago, 'YYYYMM' ))
+                            AND CP.FEBAJA >= TO_DATE(:periodoPago, 'YYYYMM' )
+                            AND CP.FEALTA <> CP.FEBAJA
+      )       
+      SELECT CN.NMCONSECUTIVO, 
+             CN.NMPOLIZA,
+             NVL(DSCOMERCIAL,NOMBRE) DSNOMBRE,
+             CN.DNI,
+             REPLACE(REPLACE(NVL(CN.DSEMAIL,P.DSEMAIL), CHR(13)), CHR(10))   DSEMAIL,
+             CN.NROAFILIADOS
+             FROM COBERTURAS_NOTIFICACION CN LEFT JOIN PERSONAS P ON P.DNI=CN.DNI
+    ]]>
+    </entry>
+    <!--  FIN NOTIFICACION LIMITE PAGO -->
+        
+    <!--  INGRESO RETIRO AFILIACION -->
+    <entry key="consulta.novedades.ingreso.retiro.afiliacion">
+    <![CDATA[
+       SELECT 
+            N.NMPERIODO PERIODO,
+            N.TIPO_DOCUMENTO_EMPLEADO||N.DNI_EMPLEADO DNI,
+            N.CDTIPO_AFILIADO tipoCotizante,
+            CA.NPOLIZA,
+            N.FEINICIO_NOVEDAD,
+            N.FEFIN_NOVEDAD,
+            N.SNING NOVEDADING,
+            N.SNRET NOVEDADRET
+         FROM T094_CONTROL_NOVEDADES CN
+            INNER JOIN T094_NOVEDADES N ON CN.NMFORMULARIO_PAGO = N.NMFORMULARIO_PAGO
+            INNER JOIN T094_CONTROL_AUTOLIQUIDACIONES CA ON CA.NMFORMULARIO_PAGO = CN.NMFORMULARIO_PAGO
+         WHERE NVL(CN.SNPROCESADO, 'N') = 'N'
+            AND NVL(N.SNPROCESADO, 'N') = 'N'
+            AND (N.SNING = 'X' OR N.SNRET = 'X')
+            AND N.NMFORMULARIO_PAGO = :numeroFormulario
+    ]]>
+    </entry>
+    
+    <entry key="ingreso.ingresoretiro.afiliacion">
+    <![CDATA[
+        INSERT INTO TCPG_NOV_ING_RET_AFI (
+                    NMCONSECUTIVO, NMPERIODO, DNI,
+                    NMPOLIZA, CDTIPO_COTIZANTE, NMFORMULARIO_PAGO,
+                    CDTIPO_NOVEDAD, DNI_USUARIO, FEINGRESA, 
+                    CDTIPO_DOC_EMPLEADOR, DNI_EMPLEADOR, 
+                    DNI_EMPRESA, CDTIPO_DOC_EMPLEADO, 
+                    DNI_EMPLEADO, NOMBRE, PTINGRESO_BASE_LIQ, 
+                    NMDIAS_COTIZADOS, FEINICIO_NOVEDAD, FEFIN_NOVEDAD,
+                    CDSUCURSAL, CDPUNTO_PAGO, PTSALARIO_BASICO, 
+                    POCOTIZACION, PTCOTIZACION, FENACIMIENTO, 
+                    SEXO, CDCLASE_RIESGO, CDMUNICIPIO, 
+                    SNEXTRANJERO_NO_PENSION, SNCOLOMBIANO_RES_EXTE, 
+                    CDDEPARTAMENTO, SNSALARIO_INTEGRAL,
+                    DSAFP, DSEPS, CDSUBTIPO_COTIZANTE )
+            SELECT  SEQ_CPG_NOV_ING_RET_AFI.NEXTVAL, CONCAT(SUBSTR(:periodoCotizacion,3,4),SUBSTR(:periodoCotizacion,1,2)), 
+                    :dniEmpleado, :poliza, :tipoCotizante, :numeroFormulario, 
+                    :tipoNovedad, :dniIngresa, sysdate, TIPO_DOCUMENTO_EMPLEADOR, 
+                    DNI_EMPLEADOR, DNI_EMPRESA, TIPO_DOCUMENTO_EMPLEADO, 
+                    DNI_EMPLEADO, NOMBRE, PTINGRESO_BASE_LIQ, NMDIAS_COTIZADOS,
+                    FEINICIO_NOVEDAD, FEFIN_NOVEDAD, CDNUEVA_SUCURSAL, CDPUNTO_PAGO, 
+                    PTSALARIO_BASICO, POCOTIZACION_ATEP, PTCOTIZACION, 
+                    FENACIMIENTO, SEXO, CDCLASE_RIESGO, CDMUNICIPIO, SNEXTRANJERO_NO_PENSION, 
+                    SNCOLOMBIANO_RES_EXTE, CDDEPARTAMENTO, SNSALARIO_INTEGRAL, 
+                    DSNUEVA_AFP, DSNUEVA_EPS, CDSUBTIPO_COTIZANTE
+                    FROM T094_NOVEDADES 
+                    WHERE NMPERIODO =:periodoCotizacion 
+                    AND DNI =:dniEmpleado 
+                    AND NPOLIZA =:poliza 
+                    AND NMFORMULARIO_PAGO =:numeroFormulario
+                    AND (FEINICIO_NOVEDAD =:fechaInicioNovedad OR FEINICIO_NOVEDAD IS NULL)
+                    AND (FEFIN_NOVEDAD =:fechaFinNovedad  OR FEFIN_NOVEDAD IS NULL)
+                    AND ROWNUM <=1
+    ]]>
+    </entry>
+    <!-- FIN INGRESO RETIRO AFILIACION -->
+    
+    <entry key="consulta.datosCT">
+    <![CDATA[
+        SELECT * FROM (
+            SELECT
+                HR.POCOTIZACION_ATEP,
+                HR.CDSUCURSAL,
+                HR.FEALTA,
+                HR.FEBAJA
+            FROM
+                T094_HISTORICO_RECLASIFICACION HR
+            WHERE
+                HR.CDSUCURSAL =:sucursal
+                AND HR.NPOLIZA =:poliza
+                AND HR.FEALTA <= LAST_DAY( TO_DATE(:periodo, 'YYYYMM' ))
+                AND HR.FEBAJA >= TO_DATE(:periodo, 'YYYYMM' )
+            ORDER BY
+                FEINGRESA DESC
+        ) WHERE ROWNUM = 1
+    ]]>
+    </entry>
+    
+    <entry key="consulta.proximaFechaVCT">
+    <![CDATA[
+     SELECT LAST_DAY(ADD_MONTHS(TO_DATE(MIN(SUBSTR(N.NMPERIODO,3)||SUBSTR(N.NMPERIODO,1,2)),'YYYYMM'),-1))
+     FROM T094_NOVEDADES N
+        INNER JOIN T094_CUERPOLIZA CP on N.npoliza = CP.NPOLIZA
+     WHERE DECODE(N.SNVCT,'S','X',N.SNVCT) = 'X'
+            AND N.DNI_EMPLEADOR = SUBSTR(CP.DNI,2)
+            AND SUBSTR(N.NMPERIODO,3)||SUBSTR(N.NMPERIODO,1,2) > :periodo
+            AND N.DNI_EMPLEADO = SUBSTR(:dniEmpleado,2)
+            AND N.TIPO_DOCUMENTO_EMPLEADO = SUBSTR(:dniEmpleado,1,1)
+            AND N.CDTIPO_AFILIADO = :tipoCotizante
+    ]]>
+    </entry>
+    
+    <entry key="consulta.maxFechasCobertura">
+    <![CDATA[
+        SELECT '1',
+             MAX(FEALTA) AS MAX_FEALTA,
+             MAX(CR.FEBAJA) AS MAX_FEBAJA,
+             MAX(TO_CHAR(TO_DATE(CR.NMULTIMO_PERIODO_COTIZADO,'MMYYYY'),'YYYYMM')) AS NMULTIMO_PERIODO_COTIZADO,
+             COUNT(1) TOTAL_COBERTURAS
+            FROM T094_CUERPOLIZA_RIESGO CR
+            WHERE CR.FEBAJA >= TO_DATE(:periodo,'YYYYMM')
+            AND CR.FEALTA < LAST_DAY(TO_DATE(:periodo,'YYYYMM')) + 1
+            AND CR.DNI = :dni
+            AND CR.NPOLIZA = :poliza
+            AND(
+                (
+                    :tipoCotizante = '23'
+                    AND CDTIPO_AFILIADO =:tipoAfiliado
+                    AND CDTIPO_COTIZANTE =:tipoCotizante
+                )
+                OR(
+                    :tipoCotizante <> '23'
+                    AND CDTIPO_AFILIADO =:tipoAfiliado
+                    AND CDTIPO_COTIZANTE <> '23'
+                )
+            )
+    ]]>
+    </entry>
+    
+    <entry key="consulta.datosCobertura">
+    <![CDATA[
+        SELECT * FROM (
+            SELECT
+                MAX( cr.febaja ) febaja,
+                ncertificado
+            FROM
+                t094_cuerpoliza_riesgo cr
+            WHERE
+                cr.fealta <= LAST_DAY( TO_DATE(:periodo, 'YYYYMM' ))
+                AND cr.febaja >= TO_DATE(:periodo, 'YYYYMM' )
+                AND cr.dni =:dni
+                AND cr.npoliza =:poliza
+                AND(
+                    (
+                        :tipoCotizante = '23'
+                        AND CDTIPO_AFILIADO =:tipoAfiliado
+                        AND CDTIPO_COTIZANTE =:tipoCotizante
+                    )
+                    OR(
+                        :tipoCotizante <> '23'
+                        AND CDTIPO_AFILIADO =:tipoAfiliado
+                        AND CDTIPO_COTIZANTE <> '23'
+                    )
+                )
+            GROUP BY cr.ncertificado
+            ORDER BY MAX( cr.febaja ) DESC  
+        ) x
+       WHERE ROWNUM = 1
+    ]]>
+    </entry>
+    
+    <entry key="consulta.periodos.afectados.cambioCT">
+    <![CDATA[    
+        SELECT nmperiodo 
+        FROM TCPG_ESTADO_CUENTA 
+        WHERE nmpoliza =:poliza
+            AND dni_afiliado =:dni
+            AND cdtipo_cotizante =:tipocotizante
+            AND nmperiodo between :periodoInicial and :periodoFinal
+    ]]>
+    </entry>    
+    
+    <entry key="actualizar.estadoCuenta_CT">
+    <![CDATA[    
+        UPDATE TCPG_ESTADO_CUENTA set 
+            cdsucursal_pagadora = :ctp, 
+            potasa_esperada = :tasa,
+            ptcotizacion_esperada =:cotizacion,
+            cdsucursal = :sucursal
+        WHERE nmpoliza =:poliza
+            AND dni_afiliado =:dni
+            AND cdtipo_cotizante =:tipocotizante
+            AND nmperiodo =:periodo
+    ]]>
+    </entry>
+    
+    <entry key="consulta.historicoAfiliado.afectado">
+    <![CDATA[    
+    SELECT * from (
+        SELECT npoliza,
+            dni,
+            cdsucursal,
+            fealta,
+            febaja,
+            ncertificado,
+            cdfuente,
+            dni_ingresa,
+            feingreso,
+            cdsucursal_pagadora,
+            femodifica,
+            dni_modifica,
+            cdtema,
+            feultima_actualizacion
+        FROM T094_HISTORICO_AFILIADOS 
+        WHERE npoliza = :poliza 
+                AND dni = :dni 
+                AND ncertificado = :certificado 
+                AND fealta <= last_day(TO_DATE(:periodo,'YYYYMM') )
+                AND febaja >= TO_DATE(:periodo,'YYYYMM')
+        order by fealta DESC
+    ) where ROWNUM=1        
+    ]]>
+    </entry>
+    
+    <entry key="actualizar.febaja.historicoAfiliado.afectado">
+    <![CDATA[    
+    UPDATE T094_HISTORICO_AFILIADOS 
+    SET febaja = trunc(:febaja), 
+        DNI_MODIFICA = :dniModifica, 
+        femodifica = SYSDATE
+    WHERE npoliza = :poliza 
+        AND dni = :dni 
+        AND ncertificado = :certificado 
+        AND febaja=:febajaOriginal
+    ]]>
+    </entry>
+    
+    <entry key="actualizar.historicoAfiliado.afectado">
+    <![CDATA[    
+    UPDATE T094_HISTORICO_AFILIADOS 
+    SET febaja = trunc(:febaja), 
+        DNI_MODIFICA = :dniModifica,
+        DNI_INGRESA = DECODE(:dniIngresa,NULL,DNI_INGRESA,:dniIngresa),
+        feingreso = DECODE(:dniIngresa,NULL,feingreso,SYSDATE),
+        femodifica = SYSDATE,
+        cdsucursal = :sucursal,
+        cdsucursal_pagadora = :sucursalPagadora
+    WHERE npoliza = :poliza 
+        AND dni = :dni 
+        AND ncertificado = :certificado 
+        AND febaja=:febajaOriginal
+    ]]>
+    </entry>
+    
+    <entry key="insertar.historicoAfiliado.afectado">
+    <![CDATA[    
+        INSERT INTO t094_historico_afiliados (
+            npoliza,
+            dni,
+            cdsucursal,
+            fealta,
+            febaja,
+            ncertificado,
+            cdfuente,
+            dni_ingresa,
+            feingreso,
+            cdsucursal_pagadora,
+            cdtema
+        ) VALUES (
+            :poliza,
+            :dni,
+            :sucursal,
+            trunc(:fealta),
+            trunc(:febaja),
+            :certificado,
+            :fuente,
+            :dniIngresa,
+            SYSDATE,
+            :sucursalPagadora,
+            :tema
+        )
+    ]]>
+    </entry>
+    
+    <entry key="consultar.datos.planillaN">
+    <![CDATA[
+        SELECT nmformulario_pago_padre FORMULARIO_PADRE, 
+        CASE WHEN PTVALOR_BANCO_HIJO = 0 THEN 'M'
+            ELSE 'A' END TIPO_N
+           FROM TCPG_AFECT_PLANILLAS_N
+        WHERE nmformulario_pago_hijo = :numeroFormulario
+        AND  FEREVERSA IS NULL                         
+  
+    ]]>
+    </entry>    
+    
+    <entry key="obtener.dia.habil">
+    <![CDATA[    
+            WITH DATOS_PERIODO AS
+         (SELECT TO_CHAR(TO_DATE(:periodo, 'YYYYMM'), 'YYYYMM') PERIODO FROM DUAL), TOTAL_DIAS_MES AS
+         (SELECT (TRUNC(TO_DATE(DP.PERIODO, 'YYYYMM'), 'MON') + rownum - 1) DIA_DEL_MES
+            FROM DATOS_PERIODO DP
+           WHERE DP.PERIODO =
+                 TO_CHAR(TRUNC(TO_DATE(DP.PERIODO, 'YYYYMM'), 'MON') + rownum - 1, 'YYYYMM')
+          CONNECT BY LEVEL <= 31 ORDER BY DIA_DEL_MES), DIAS_HABILES AS
+         (SELECT M.DIA_DEL_MES DIA
+            FROM TOTAL_DIAS_MES M
+           WHERE NOT EXISTS (SELECT 1
+                    FROM T094_DIAS_FESTIVOS F
+                   WHERE M.DIA_DEL_MES = F.FEFESTIVO)), DIAS AS
+         (SELECT DIAS_HABILES.*, ROW_NUMBER() OVER(ORDER BY DIA ASC) ROW_NUM
+            FROM DIAS_HABILES)
+        SELECT DIA
+          FROM DIAS
+         WHERE ROW_NUM IN (:dia)
+    ]]>
+    </entry>
+        
+    <entry key="consultar.sumatoriaIbcPeriodo">
+    <![CDATA[
+        SELECT SUM(PTINGRESO_BASE_LIQ) IBC
+         FROM T094_NOVEDADES N
+            INNER JOIN T094_CUERPOLIZA CP on N.npoliza = CP.NPOLIZA
+         WHERE  N.DNI_EMPLEADOR = SUBSTR(CP.DNI,2)
+                AND SUBSTR(N.NMPERIODO,3)||SUBSTR(N.NMPERIODO,1,2) > :periodo
+                AND N.DNI_EMPLEADO = SUBSTR(:dniEmpleado,2)
+                AND N.TIPO_DOCUMENTO_EMPLEADO = SUBSTR(:dniEmpleado,1,1)
+                AND N.CDTIPO_AFILIADO = :tipoCotizante
+    ]]>
+    </entry>
+    
+    <entry key="consultar.ley.proceso">
+    <![CDATA[
+        SELECT NVL(CA.CDLEY,'1747') CDLEY
+            FROM T094_CONTROL_AUTOLIQUIDACIONES CA
+            WHERE CA.NMFORMULARIO_PAGO IN  (
+                SELECT REGEXP_SUBSTR (:cadenaFormularios, '[^,]+', 1,LEVEL)
+                FROM DUAL                                       
+                CONNECT BY LEVEL <= LENGTH (REGEXP_REPLACE (:cadenaFormularios, '[^,]+'))  + 1)
+            AND CA.NMPERIODO = SUBSTR(:periodo,5)||SUBSTR(:periodo,1,4)
+            GROUP BY CA.CDLEY
+    ]]>
+    </entry>
+    
+    <!-- METODO DEPRECATED, NO SE USA -->
+    <entry key="consultar.contratos.independientes">
+    <![CDATA[
+        SELECT RTRIM(XMLAGG(XMLELEMENT(E, N.NMFORMULARIO_PAGO || ',')).EXTRACT('//text()').EXTRACT('//text()') ,',')
+            FROM T094_NOVEDADES N 
+                INNER JOIN T094_CONTROL_AUTOLIQUIDACIONES CA ON N.NMFORMULARIO_PAGO = CA.NMFORMULARIO_PAGO AND N.NMPERIODO = CA.NMPERIODO
+                INNER JOIN T094_CUERPOLIZA_RIESGO C ON C.NPOLIZA = CA.NPOLIZA AND C.DNI = N.TIPO_DOCUMENTO_EMPLEADO||N.DNI_EMPLEADO
+                INNER JOIN TCPG_CONDICIONES_COTIZA CC ON CC.CDTIPO_COTIZANTE = N.CDTIPO_AFILIADO                
+        WHERE 
+            CA.NMPERIODO = SUBSTR(:periodo,5)||SUBSTR(:periodo,1,4)
+           AND  C.FEALTA <= TO_DATE(SUBSTR(:periodo,5)||SUBSTR(:periodo,1,4),'MMYYYY')
+           AND  C.FEBAJA >= LAST_DAY(TO_DATE(SUBSTR(:periodo,5)||SUBSTR(:periodo,1,4),'MMYYYY'))
+           AND  N.TIPO_DOCUMENTO_EMPLEADOR = :tipoDocEmpleador
+           AND  N.DNI_EMPLEADO = :dni
+           AND  N.TIPO_DOCUMENTO_EMPLEADO = :tipoDocumento
+           AND  N.DNI_EMPLEADOR = :dniEmpleador
+           AND  NVL(CA.CDLEY,'1747') = '2388'
+           AND  CC.CDTIPO_AFILIADO = :tipoAfiliado
+           AND  CA.CDTIPO_PLANILLA IN ('I','A','M','Y','N')
+           AND EXISTS (SELECT 1
+                          FROM DUAL
+                          WHERE REGEXP_SUBSTR (:cadenaFormularios, '[^,]+', 1,LEVEL) = N.NMFORMULARIO_PAGO
+                         CONNECT BY LEVEL <= LENGTH (REGEXP_REPLACE (:cadenaFormularios, '[^,]+'))  + 1
+                         )
+    ]]>
+    </entry>
+    
+    <!-- METODO DEPRECATED, NO SE USA -->
+    <entry key="consultar.sin.novedades.1747">
+    <![CDATA[
+        SELECT  NVL(N.NMDIAS_COTIZADOS,0) NMDIAS_COTIZADOS,
+                     NVL(N.POCOTIZACION_ATEP,0) POCOTIZACION_ATEP,    
+                     NVL(N.PTCOTIZACION,0) PTCOTIZACION,
+                     NVL(N.PTINGRESO_BASE_LIQ,0)PTINGRESO_BASE_LIQ,
+                     NVL(TRIM(N.SNING),'N') SNING,
+                     NVL(TRIM(N.SNRET),'N') SNRET,
+                     CA.CDTIPO_PLANILLA,
+                     CA.FEPAGO,
+                     N.SNVST,
+                     N.SNVTE,
+                     N.SNVSP,
+                     CA.NMFORMULARIO_PAGO,
+                     CA.NMPLANILLA,
+                     CA.DNI_APORTANTE_ORIGINAL RESPONSABLE,
+                     N.CDSUBTIPO_COTIZANTE,
+                     N.CDTIPO_AFILIADO TIPO_COTIZANTE,
+                     N.NMPERIODO
+            FROM T094_NOVEDADES N
+                INNER JOIN T094_CONTROL_AUTOLIQUIDACIONES CA ON N.NMFORMULARIO_PAGO = CA.NMFORMULARIO_PAGO
+                INNER JOIN TCPG_CONDICIONES_COTIZA CC ON CC.CDTIPO_COTIZANTE = N.CDTIPO_AFILIADO                
+            WHERE  N.DNI_EMPLEADO = :dni
+            AND  N.DNI_EMPLEADOR = :dniEmpleador
+            AND  N.NMPERIODO =  SUBSTR(:periodo,5,2)||SUBSTR(:periodo,1,4)
+            AND  N.TIPO_DOCUMENTO_EMPLEADOR = :tipoDocEmpleador
+            AND  CC.CDTIPO_AFILIADO = :tipoAfiliado
+            AND  NVL(CA.CDLEY,'1747') = '2388'
+            AND EXISTS (SELECT 1
+                           FROM DUAL
+                           WHERE REGEXP_SUBSTR (:cadenaFormularios, '[^,]+', 1,LEVEL) = N.NMFORMULARIO_PAGO
+                           AND   REGEXP_SUBSTR (:cadenaFormularios, '[^,]+', 1,LEVEL) IS NOT NULL
+                          CONNECT BY LEVEL <= LENGTH (REGEXP_REPLACE (:cadenaFormularios, '[^,]+'))  + 1
+                          )
+            AND NOT (NVL(N.SNSLN,'N') = 'S' OR NVL(N.SNSLN,'N') = 'X' OR
+                     NVL(N.SNIGE,'N') = 'S' OR NVL(N.SNIGE,'N') = 'X' OR
+                     NVL(N.SNLMA,'N') = 'S' OR NVL(N.SNLMA,'N') = 'X' OR
+                     NVL(N.SNVAC,'N') = 'S' OR NVL(N.SNVAC,'N') = 'X' OR NVL(N.SNVAC,'N') = 'L' OR
+                     NVL(N.SNCXS,'N') = 'S' OR NVL(N.SNCXS,'N') = 'X' OR
+                     NVL(N.NMIRP,0)> 0)
+            UNION ALL
+            SELECT  NVL(N.NMDIAS_COTIZADOS,0) NMDIAS_COTIZADOS,
+                     NVL(N.POCOTIZACION_ATEP,0) POCOTIZACION_ATEP,    
+                     NVL(N.PTCOTIZACION,0) PTCOTIZACION,
+                     NVL(N.PTINGRESO_BASE_LIQ,0)PTINGRESO_BASE_LIQ,
+                     NVL(TRIM(N.SNING),'N') SNING,
+                     NVL(TRIM(N.SNRET),'N') SNRET,
+                     CA.CDTIPO_PLANILLA,
+                     CA.FEPAGO,
+                     N.SNVST,
+                     N.SNVTE,
+                     N.SNVSP,
+                     CA.NMFORMULARIO_PAGO,
+                     CA.NMPLANILLA,
+                     CA.DNI_APORTANTE_ORIGINAL RESPONSABLE,
+                     N.CDSUBTIPO_COTIZANTE,
+                     N.CDTIPO_AFILIADO TIPO_COTIZANTE,
+                     N.NMPERIODO
+            FROM T094_NOVEDADES N
+                INNER JOIN T094_CONTROL_AUTOLIQUIDACIONES CA ON N.NMFORMULARIO_PAGO = CA.NMFORMULARIO_PAGO
+                INNER JOIN TCPG_CONDICIONES_COTIZA CC ON CC.CDTIPO_COTIZANTE = N.CDTIPO_AFILIADO 
+            WHERE  N.DNI_EMPLEADO = :dni
+            AND  N.DNI_EMPLEADOR = :dniEmpleador
+            AND  N.NMPERIODO =  SUBSTR(:periodo,5,2)||SUBSTR(:periodo,1,4)
+            AND  N.TIPO_DOCUMENTO_EMPLEADOR = :tipoDocEmpleador
+            AND  CC.CDTIPO_AFILIADO = :tipoAfiliado
+            AND  NVL(CA.CDLEY,'1747') = '1747'
+            AND  N.PTCOTIZACION > 0
+            AND EXISTS (SELECT 1
+                           FROM DUAL
+                           WHERE REGEXP_SUBSTR (:cadenaFormularios, '[^,]+', 1,LEVEL) = N.NMFORMULARIO_PAGO
+                           AND   REGEXP_SUBSTR (:cadenaFormularios, '[^,]+', 1,LEVEL) IS NOT NULL
+                          CONNECT BY LEVEL <= LENGTH (REGEXP_REPLACE (:cadenaFormularios, '[^,]+'))  + 1
+                          )
+            UNION ALL
+            SELECT  NVL(N.NMDIAS_COTIZADOS,0) NMDIAS_COTIZADOS,
+                         NVL(N.POCOTIZACION_ATEP,0) POCOTIZACION_ATEP,    
+                         NVL(N.PTCOTIZACION,0) PTCOTIZACION,
+                         NVL(N.PTINGRESO_BASE_LIQ,0)PTINGRESO_BASE_LIQ,
+                         NVL(TRIM(N.SNING),'N') SNING,
+                         NVL(TRIM(N.SNRET),'N') SNRET,
+                         CA.CDTIPO_PLANILLA,
+                         CA.FEPAGO,
+                         N.SNVST,
+                         N.SNVTE,
+                         N.SNVSP,
+                         CA.NMFORMULARIO_PAGO,
+                         CA.NMPLANILLA,
+                         CA.DNI_APORTANTE_ORIGINAL RESPONSABLE,
+                         N.CDSUBTIPO_COTIZANTE,
+                         N.CDTIPO_AFILIADO TIPO_COTIZANTE,
+                         N.NMPERIODO
+                FROM T094_NOVEDADES N
+                    INNER JOIN T094_CONTROL_AUTOLIQUIDACIONES CA ON N.NMFORMULARIO_PAGO = CA.NMFORMULARIO_PAGO
+                    INNER JOIN TCPG_CONDICIONES_COTIZA CC ON CC.CDTIPO_COTIZANTE = N.CDTIPO_AFILIADO 
+                WHERE  N.DNI_EMPLEADO = :dni
+                AND  N.DNI_EMPLEADOR = :dniEmpleador
+                AND  N.NMPERIODO =  SUBSTR(:periodo,5,2)||SUBSTR(:periodo,1,4)
+                AND  N.TIPO_DOCUMENTO_EMPLEADOR = :tipoDocEmpleador
+                AND  CC.CDTIPO_AFILIADO = :tipoAfiliado
+                AND  N.PTCOTIZACION > 0
+                AND  EXISTS (SELECT 1
+                               FROM DUAL
+                               WHERE REGEXP_SUBSTR (:cadenaIndependientes, '[^,]+', 1,LEVEL) = N.NMFORMULARIO_PAGO
+                               AND   REGEXP_SUBSTR (:cadenaIndependientes, '[^,]+', 1,LEVEL) IS NOT NULL
+                              CONNECT BY LEVEL <= LENGTH (REGEXP_REPLACE (:cadenaIndependientes, '[^,]+'))  + 1
+                              )
+    ]]>
+    </entry>
+    
+    <entry key="consultar.con.novedades.N">
+    <![CDATA[
+        SELECT  NVL(N.NMDIAS_COTIZADOS,0) NMDIAS_COTIZADOS,
+                 NVL(N.POCOTIZACION_ATEP,0) POCOTIZACION_ATEP,    
+                 NVL(N.PTCOTIZACION,0) PTCOTIZACION,
+                 NVL(N.PTINGRESO_BASE_LIQ,0)PTINGRESO_BASE_LIQ,
+                 NVL(TRIM(N.SNING),'N') SNING,
+                 NVL(TRIM(N.SNRET),'N') SNRET,
+                 CA.CDTIPO_PLANILLA,
+                 CA.NMFORMULARIO_PAGO,
+                 CA.NMPLANILLA,
+                 CA.FEPAGO,
+                 CA.DNI_APORTANTE_ORIGINAL RESPONSABLE,
+                 N.CDSUBTIPO_COTIZANTE,
+                 N.CDTIPO_AFILIADO TIPO_COTIZANTE,
+                 N.NMPERIODO
+        FROM T094_NOVEDADES N
+            INNER JOIN T094_CONTROL_AUTOLIQUIDACIONES CA ON N.NMFORMULARIO_PAGO = CA.NMFORMULARIO_PAGO
+            INNER JOIN TCPG_CONDICIONES_COTIZA CC ON CC.CDTIPO_COTIZANTE = N.CDTIPO_AFILIADO
+        WHERE  N.DNI_EMPLEADO = :dni
+            AND  N.DNI_EMPLEADOR = :dniEmpleador
+            AND  CC.CDTIPO_AFILIADO = :tipoAfiliado
+            AND  N.NMPERIODO =  SUBSTR(:periodo,5,2)||SUBSTR(:periodo,1,4)
+            AND  N.TIPO_DOCUMENTO_EMPLEADOR = :tipoDocEmpleador
+            AND EXISTS (SELECT 1
+                           FROM DUAL
+                           WHERE REGEXP_SUBSTR (:cadenaFormularios, '[^,]+', 1,LEVEL) = N.NMFORMULARIO_PAGO
+                           AND   REGEXP_SUBSTR (:cadenaFormularios, '[^,]+', 1,LEVEL) IS NOT NULL
+                          CONNECT BY LEVEL <= LENGTH (REGEXP_REPLACE (:cadenaFormularios, '[^,]+'))  + 1)
+            AND  (NVL(N.SNSLN,'N') = 'S' OR NVL(N.SNSLN,'N') = 'X' OR
+                  NVL(N.SNIGE,'N') = 'S' OR NVL(N.SNIGE,'N') = 'X' OR
+                  NVL(N.SNLMA,'N') = 'S' OR NVL(N.SNLMA,'N') = 'X' OR
+                  NVL(N.SNVAC,'N') = 'S' OR NVL(N.SNVAC,'N') = 'X' OR NVL(N.SNVAC,'N') = 'L' OR
+                  NVL(N.SNCXS,'N') = 'S' OR NVL(N.SNCXS,'N') = 'X' OR
+                  NVL(N.NMIRP,0)> 0)
+    ]]>
+    </entry>
+    
+    
+    <!-- METODO DEPRECATED, NO SE USA -->
+    <entry key="consultar.sin.novedades.N">
+    <![CDATA[
+        SELECT  NVL(N.NMDIAS_COTIZADOS,0) NMDIAS_COTIZADOS,
+                 NVL(N.POCOTIZACION_ATEP,0) POCOTIZACION_ATEP,    
+                 NVL(N.PTCOTIZACION,0) PTCOTIZACION,
+                 NVL(N.PTINGRESO_BASE_LIQ,0)PTINGRESO_BASE_LIQ,
+                 NVL(TRIM(N.SNING),'N') SNING,
+                 NVL(TRIM(N.SNRET),'N') SNRET,
+                 CA.CDTIPO_PLANILLA,
+                 CA.FEPAGO,
+                 N.SNVST,
+                 N.SNVTE,
+                 N.SNVSP,
+                 CA.NMFORMULARIO_PAGO,
+                 CA.NMPLANILLA,
+                 CA.DNI_APORTANTE_ORIGINAL RESPONSABLE,
+                 N.CDSUBTIPO_COTIZANTE,
+                 N.CDTIPO_AFILIADO TIPO_COTIZANTE,
+                 N.NMPERIODO,
+                 N.FEINGRESA_RECAUDOS
+        FROM T094_NOVEDADES N
+            INNER JOIN T094_CONTROL_AUTOLIQUIDACIONES CA ON N.NMFORMULARIO_PAGO = CA.NMFORMULARIO_PAGO
+            INNER JOIN TCPG_CONDICIONES_COTIZA CC ON CC.CDTIPO_COTIZANTE = N.CDTIPO_AFILIADO
+        WHERE  N.DNI_EMPLEADO = :dni
+        AND  N.DNI_EMPLEADOR = :dniEmpleador
+        AND  CC.CDTIPO_AFILIADO = :tipoAfiliado
+        AND  N.NMPERIODO =  SUBSTR(:periodo,5,2)||SUBSTR(:periodo,1,4)
+        AND  N.TIPO_DOCUMENTO_EMPLEADOR = :tipoDocEmpleador
+        AND EXISTS (SELECT 1
+                       FROM DUAL
+                       WHERE REGEXP_SUBSTR (:cadenaFormularios, '[^,]+', 1,LEVEL) = N.NMFORMULARIO_PAGO
+                       AND   REGEXP_SUBSTR (:cadenaFormularios, '[^,]+', 1,LEVEL) IS NOT NULL
+                      CONNECT BY LEVEL <= LENGTH (REGEXP_REPLACE (:cadenaFormularios, '[^,]+'))  + 1
+                      )
+        AND NOT (NVL(N.SNSLN,'N') = 'S' OR NVL(N.SNSLN,'N') = 'X' OR
+                 NVL(N.SNIGE,'N') = 'S' OR NVL(N.SNIGE,'N') = 'X' OR
+                 NVL(N.SNLMA,'N') = 'S' OR NVL(N.SNLMA,'N') = 'X' OR
+                 NVL(N.SNVAC,'N') = 'S' OR NVL(N.SNVAC,'N') = 'X' OR NVL(N.SNVAC,'N') = 'L' OR
+                 NVL(N.SNCXS,'N') = 'S' OR NVL(N.SNCXS,'N') = 'X' OR
+                 NVL(N.NMIRP,0)> 0)
+        UNION
+        SELECT  NVL(N.NMDIAS_COTIZADOS,0) NMDIAS_COTIZADOS,
+                 NVL(N.POCOTIZACION_ATEP,0) POCOTIZACION_ATEP,    
+                 NVL(N.PTCOTIZACION,0) PTCOTIZACION,
+                 NVL(N.PTINGRESO_BASE_LIQ,0)PTINGRESO_BASE_LIQ,
+                 NVL(TRIM(N.SNING),'N') SNING,
+                 NVL(TRIM(N.SNRET),'N') SNRET,
+                 CA.CDTIPO_PLANILLA,
+                 CA.FEPAGO,
+                 N.SNVST,
+                 N.SNVTE,
+                 N.SNVSP,
+                 CA.NMFORMULARIO_PAGO,
+                 CA.NMPLANILLA,
+                 CA.DNI_APORTANTE_ORIGINAL RESPONSABLE,
+                 N.CDSUBTIPO_COTIZANTE,
+                 N.CDTIPO_AFILIADO TIPO_COTIZANTE,
+                 N.NMPERIODO,
+                 N.FEINGRESA_RECAUDOS
+        FROM T094_NOVEDADES N
+            INNER JOIN T094_CONTROL_AUTOLIQUIDACIONES CA ON N.NMFORMULARIO_PAGO = CA.NMFORMULARIO_PAGO
+            INNER JOIN TCPG_CONDICIONES_COTIZA CC ON CC.CDTIPO_COTIZANTE = N.CDTIPO_AFILIADO
+        WHERE  N.DNI_EMPLEADO = :dni
+        AND  N.DNI_EMPLEADOR = :dniEmpleador
+        AND  CC.CDTIPO_AFILIADO = :tipoAfiliado
+        AND  N.NMPERIODO =  SUBSTR(:periodo,5,2)||SUBSTR(:periodo,1,4)
+        AND  N.TIPO_DOCUMENTO_EMPLEADOR = :tipoDocEmpleador
+        AND  N.PTCOTIZACION > 0
+        AND  NVL(CA.CDLEY,'1747') = '2388'
+        AND EXISTS (SELECT 1
+                       FROM DUAL
+                       WHERE REGEXP_SUBSTR (:cadenaFormularios, '[^,]+', 1,LEVEL) = N.NMFORMULARIO_PAGO
+                       AND   REGEXP_SUBSTR (:cadenaFormularios, '[^,]+', 1,LEVEL) IS NOT NULL
+                      CONNECT BY LEVEL <= LENGTH (REGEXP_REPLACE (:cadenaFormularios, '[^,]+'))  + 1)
+    ]]>
+    </entry>
+    
+    <!-- METODO DEPRECATED, NO SE USA -->
+    <entry key="consultar.contratos.afiliado">
+    <![CDATA[
+        SELECT
+            RTRIM( XMLAGG( XMLELEMENT( E, N.NMFORMULARIO_PAGO || ',' )).EXTRACT( '//text()' ).EXTRACT( '//text()' ), ',' )
+        FROM
+            T094_NOVEDADES N
+        INNER JOIN T094_CONTROL_AUTOLIQUIDACIONES CA ON
+            N.NMFORMULARIO_PAGO = CA.NMFORMULARIO_PAGO
+        INNER JOIN TCPG_CONDICIONES_COTIZA CC ON
+            CC.CDTIPO_COTIZANTE = N.CDTIPO_AFILIADO
+        WHERE
+            N.DNI_EMPLEADO =:dni
+            AND N.DNI_EMPLEADOR =:dniEmpleador
+            AND N.NMPERIODO =:periodo
+            AND CC.CDTIPO_AFILIADO =:tipoAfiliado
+            AND (
+            (:tipoCotizante='23' AND CC.CDTIPO_AFILIADO=:tipoAfiliado AND CC.CDTIPO_COTIZANTE = :tipoCotizante)
+            OR
+            (:tipoCotizante<>'23' AND CC.CDTIPO_AFILIADO=:tipoAfiliado AND CC.CDTIPO_COTIZANTE <> '23')
+            )
+    ]]>
+    </entry>
+    
+    <entry key="consulta.ultimoPeriodoCotizado">
+    <![CDATA[
+        SELECT *
+          FROM (SELECT SUBSTR(N1.NMPERIODO, 3, 4) || SUBSTR(N1.NMPERIODO, 1, 2) AS NMPERIODO,
+                       NVL(CA.CDLEY, '1747') CDLEY
+                  FROM T094_NOVEDADES N1, T094_CONTROL_AUTOLIQUIDACIONES CA
+                 WHERE N1.DNI_EMPLEADO = :dniAfiliado
+                   AND N1.TIPO_DOCUMENTO_EMPLEADO = :tipoDocumento
+                   AND N1.DNI_EMPLEADOR = :nroDocumentoEmpleador
+                   AND N1.TIPO_DOCUMENTO_EMPLEADOR = :tipoDocumentoEmpleador
+                   AND N1.CDTIPO_AFILIADO = :tipoCotizante
+                   AND CA.NMFORMULARIO_PAGO = N1.NMFORMULARIO_PAGO
+                   AND NVL(CA.CDTIPO_PLANILLA, 'E') <> 'N'
+                   AND N1.NMPERIODO =
+                       (SELECT SUBSTR(NOV.NMPERIODO, 5) ||
+                               SUBSTR(NOV.NMPERIODO, 1, 4) NMPERIODO
+                          FROM (SELECT MAX(SUBSTR(N.NMPERIODO, 3, 4) ||
+                                           SUBSTR(N.NMPERIODO, 1, 2)) NMPERIODO
+                                  FROM T094_NOVEDADES                 N,
+                                       T094_CONTROL_AUTOLIQUIDACIONES CA1
+                                 WHERE N.DNI_EMPLEADO = :dniAfiliado
+                                   AND N.TIPO_DOCUMENTO_EMPLEADO = :tipoDocumento
+                                   AND N.DNI_EMPLEADOR = :nroDocumentoEmpleador
+                                   AND N.TIPO_DOCUMENTO_EMPLEADOR =
+                                       :tipoDocumentoEmpleador
+                                   AND N.NMFORMULARIO_PAGO = CA1.NMFORMULARIO_PAGO
+                                   AND N.CDTIPO_AFILIADO = :tipoCotizante
+                                   AND NVL(CA1.CDTIPO_PLANILLA, 'E') <> 'N') NOV))
+         WHERE ROWNUM = 1 
+    ]]>
+    </entry>
+    
+    <entry key="consulta.ultimosValoresCotizados.1747">
+    <![CDATA[
+      SELECT * FROM (
+        SELECT N.PTINGRESO_BASE_LIQ ULTIMO_IBC_COTIZADO, N.PTSALARIO_BASICO ULTIMO_SALARIO_COTIZADO, 
+        N.NMDIAS_COTIZADOS DIAS_COTIZADOS,  N.DSNUEVA_AFP AFP, N.DSNUEVA_EPS EPS
+          FROM T094_NOVEDADES N, T094_CONTROL_AUTOLIQUIDACIONES CA
+         WHERE N.DNI_EMPLEADO = :dniAfiliado
+           AND N.TIPO_DOCUMENTO_EMPLEADO = :tipoDocumento
+           AND N.DNI_EMPLEADOR = :nroDocEmpleador
+           AND N.NMPERIODO = SUBSTR(:periodo, 5, 2) || SUBSTR(:periodo, 1, 4)
+           AND N.TIPO_DOCUMENTO_EMPLEADOR = :tipoDocEmpleador
+           AND N.NMFORMULARIO_PAGO = CA.NMFORMULARIO_PAGO
+           AND N.CDTIPO_AFILIADO = :tipoCotizante
+           AND NVL(CA.CDTIPO_PLANILLA, 'E') <> 'N'
+           AND NVL(CA.CDLEY, '1747') = '1747'
+         ORDER BY NVL(N.FEINGRESA_RECAUDOS, N.FEPROCESO) DESC )
+      WHERE ROWNUM = 1
+    ]]>
+    </entry>
+    
+    <entry key="consulta.ultimosValoresCotizados.2388">
+    <![CDATA[
+        SELECT * FROM (
+        SELECT SUM(N.PTINGRESO_BASE_LIQ) ULTIMO_IBC_COTIZADO,
+               MAX(N.PTSALARIO_BASICO) ULTIMO_SALARIO_COTIZADO,
+               SUM(N.NMDIAS_COTIZADOS) DIAS_COTIZADOS,
+               N.DSNUEVA_AFP AFP,
+               N.DSNUEVA_EPS EPS
+          FROM T094_NOVEDADES N, T094_CONTROL_AUTOLIQUIDACIONES CA
+         WHERE N.DNI_EMPLEADO = :dniAfiliado
+           AND N.TIPO_DOCUMENTO_EMPLEADO = :tipoDocumento
+           AND N.DNI_EMPLEADOR = :nroDocEmpleador
+           AND N.NMPERIODO = SUBSTR(:periodo, 5, 2) || SUBSTR(:periodo, 1, 4)
+           AND N.TIPO_DOCUMENTO_EMPLEADOR = :tipoDocEmpleador
+           AND N.NMFORMULARIO_PAGO = CA.NMFORMULARIO_PAGO
+           AND N.CDTIPO_AFILIADO = :tipoCotizante
+           AND NVL(CA.CDLEY, '1747') = '2388'
+           AND NVL(CA.CDTIPO_PLANILLA, 'E') <> 'N'
+           AND NOT (NVL(N.SNSLN, 'N') = 'S' OR NVL(N.SNSLN, 'N') = 'X' OR
+                NVL(N.SNIGE, 'N') = 'S' OR NVL(N.SNIGE, 'N') = 'X' OR
+                NVL(N.SNLMA, 'N') = 'S' OR NVL(N.SNLMA, 'N') = 'X' OR
+                NVL(N.SNVAC, 'N') = 'S' OR NVL(N.SNVAC, 'N') = 'X' OR
+                NVL(N.SNVAC, 'N') = 'L' OR NVL(N.SNCXS, 'N') = 'S' OR
+                NVL(N.SNCXS, 'N') = 'X' OR NVL(N.NMIRP, 0) > 0)
+         GROUP BY N.NMPERIODO, N.DSNUEVA_AFP, N.DSNUEVA_EPS
+         ) WHERE ROWNUM =1
+    ]]>
+    </entry>
+
+    <entry key="consulta.ultimosValoresCotizados.noLaborado">
+    <![CDATA[
+        SELECT SUM(N.PTINGRESO_BASE_LIQ) ULTIMO_IBC_COTIZADO,
+               MAX(N.PTSALARIO_BASICO) ULTIMO_SALARIO_COTIZADO,
+               SUM(N.NMDIAS_COTIZADOS) DIAS_COTIZADOS
+          FROM T094_NOVEDADES N, T094_CONTROL_AUTOLIQUIDACIONES CA
+         WHERE N.DNI_EMPLEADO = :dniAfiliado
+           AND N.TIPO_DOCUMENTO_EMPLEADO = :tipoDocumento
+           AND N.DNI_EMPLEADOR = :nroDocEmpleador
+           AND N.NMPERIODO = SUBSTR(:periodo, 5, 2) || SUBSTR(:periodo, 1, 4)
+           AND N.TIPO_DOCUMENTO_EMPLEADOR = :tipoDocEmpleador
+           AND N.NMFORMULARIO_PAGO = CA.NMFORMULARIO_PAGO
+           AND N.CDTIPO_AFILIADO = :tipoCotizante
+           AND NVL(CA.CDLEY, '1747') = '2388'
+           AND NVL(CA.CDTIPO_PLANILLA, 'E') <> 'N'
+           AND (NVL(N.SNSLN, 'N') = 'S' OR NVL(N.SNSLN, 'N') = 'X' OR
+               NVL(N.SNIGE, 'N') = 'S' OR NVL(N.SNIGE, 'N') = 'X' OR
+               NVL(N.SNLMA, 'N') = 'S' OR NVL(N.SNLMA, 'N') = 'X' OR
+               NVL(N.SNVAC, 'N') = 'S' OR NVL(N.SNVAC, 'N') = 'X' OR
+               NVL(N.SNVAC, 'N') = 'L' OR NVL(N.SNCXS, 'N') = 'S' OR
+               NVL(N.SNCXS, 'N') = 'X' OR NVL(N.NMIRP, 0) > 0)
+         GROUP BY N.NMPERIODO
+    ]]>
+    </entry>
+    
+    <entry key="consulta.topesIBC.condicionesTipoCotizante">
+    <![CDATA[
+        SELECT CC.PTINGRESO_MIN_BASE_LIQ MINIBC, CC.PTINGRESO_MAX_BASE_LIQ MAXIBC
+          FROM TCPG_CONDICIONES_COTIZA CC
+         WHERE CC.CDTIPO_COTIZANTE = :tipoCotizante
+         AND ROWNUM = 1
+    ]]>
+    </entry>
+    
+     <entry key="consultar.ibc.afiliado.independiente">
+        <![CDATA[
+        WITH CALCULO_TOPE_IBC AS (
+          SELECT :numerosSmmlv *  PKGAFI_FUNCIONES_OPERACIONES.FUNAFI_SALARIO_MINIMO(:periodo) AS TOPE FROM DUAL
+         ),
+         INDEPENDIENTES_PROCESADOS AS
+             (SELECT EC.DNI_AFILIADO, EC.CDTIPO_COTIZANTE, EC.NMPERIODO
+                FROM TCPG_ESTADO_CUENTA EC
+               WHERE NMPERIODO =:periodo
+                 AND NMPOLIZA IN (SELECT REGEXP_SUBSTR(:polizas,'[^,]+', 1, LEVEL) from DUAL
+                                         CONNECT BY LEVEL<=REGEXP_COUNT(:polizas,',')+1) 
+                 AND EC.CDTIPO_AFILIADO = '02'
+               GROUP BY EC.DNI_AFILIADO, EC.CDTIPO_COTIZANTE, EC.NMPERIODO),
+            INDEP_CON_PAGOS_PENDIENTES AS
+             (SELECT INDP.DNI_AFILIADO,
+                     INDP.CDTIPO_COTIZANTE,
+                     INDP.NMPERIODO,
+                     SUM(DECODE(EC.SNEXISTE_PAGO, 'S', 0, 1)) PAGO_PENDIENTE
+                FROM TCPG_ESTADO_CUENTA EC
+               INNER JOIN INDEPENDIENTES_PROCESADOS INDP
+                  ON EC.DNI_AFILIADO = INDP.DNI_AFILIADO
+                 AND EC.CDTIPO_COTIZANTE = INDP.CDTIPO_COTIZANTE
+                 AND EC.CDTIPO_AFILIADO = '02'
+                 AND EC.NMPERIODO = INDP.NMPERIODO
+               GROUP BY INDP.DNI_AFILIADO, INDP.CDTIPO_COTIZANTE, INDP.NMPERIODO
+              HAVING SUM(DECODE(EC.SNEXISTE_PAGO, 'S', 0, 1)) > 0),
+            EXISTE_RES_1747 AS
+             (SELECT COUNT(1) CANT_LEY
+                FROM (SELECT '1747' LEY, COUNT(1) CANTIDAD
+                        FROM T094_CONTROL_AUTOLIQUIDACIONES CA
+                       WHERE CA.NMFORMULARIO_PAGO IN
+                             (SELECT N.NMFORMULARIO_PAGO
+                                FROM T094_NOVEDADES N, INDEP_CON_PAGOS_PENDIENTES IND
+                               WHERE N.NMPERIODO = IND.NMPERIODO
+                                 AND N.DNI_EMPLEADO = SUBSTR(IND.DNI_AFILIADO, 2)
+                                 AND N.TIPO_DOCUMENTO_EMPLEADO = SUBSTR(IND.DNI_AFILIADO, 1,1)
+                                 AND N.CDTIPO_AFILIADO = IND.CDTIPO_COTIZANTE)
+                         AND CA.CDTIPO_PLANILLA IN ('I', 'A', 'M', 'Y', 'N')
+                         AND NVL(CA.CDLEY, '1747') = '1747') R
+               WHERE R.LEY = '1747'
+                 AND R.CANTIDAD > 0),
+            INDEP_2388 AS
+             (SELECT INDP.DNI_AFILIADO,
+                     INDP.CDTIPO_COTIZANTE,
+               NVL(CA.CDLEY, '1747') CDLEY,
+                     NVL(N.PTINGRESO_BASE_LIQ, 0) PTINGRESO_BASE_LIQ
+                FROM T094_NOVEDADES                 N,
+                     T094_CONTROL_AUTOLIQUIDACIONES CA,
+                     INDEP_CON_PAGOS_PENDIENTES     INDP
+               WHERE N.DNI_EMPLEADO = SUBSTR(INDP.DNI_AFILIADO, 2)
+                 AND N.TIPO_DOCUMENTO_EMPLEADO = SUBSTR(IND.DNI_AFILIADO, 1,1)
+                 AND N.NMPERIODO = TO_CHAR(TO_DATE(INDP.NMPERIODO, 'YYYYMM'), 'MMYYYY')
+                 AND N.CDTIPO_AFILIADO = INDP.CDTIPO_COTIZANTE
+                 AND N.NMFORMULARIO_PAGO = CA.NMFORMULARIO_PAGO
+                 AND CA.CDTIPO_PLANILLA IN ('I', 'A', 'M', 'Y', 'N')
+                 AND CA.NMPERIODO = N.NMPERIODO
+                 AND NOT (NVL(N.SNSLN, 'N') = 'S' OR NVL(N.SNSLN, 'N') = 'X' OR
+                      NVL(N.SNIGE, 'N') = 'S' OR NVL(N.SNIGE, 'N') = 'X' OR
+                      NVL(N.SNLMA, 'N') = 'S' OR NVL(N.SNLMA, 'N') = 'X' OR
+                      NVL(N.SNVAC, 'N') = 'S' OR NVL(N.SNVAC, 'N') = 'X' OR
+                      NVL(N.SNVAC, 'N') = 'L' OR NVL(N.SNCXS, 'N') = 'S' OR
+                      NVL(N.SNCXS, 'N') = 'X' OR NVL(N.NMIRP, 0) > 0)
+              UNION
+              SELECT INDP.DNI_AFILIADO,
+                     INDP.CDTIPO_COTIZANTE,
+               NVL(CA.CDLEY, '1747') CDLEY,
+                     NVL(N.PTINGRESO_BASE_LIQ, 0) PTINGRESO_BASE_LIQ
+                FROM T094_NOVEDADES                 N,
+                     T094_CONTROL_AUTOLIQUIDACIONES CA,
+                     INDEP_CON_PAGOS_PENDIENTES     INDP
+               WHERE N.DNI_EMPLEADO = SUBSTR(INDP.DNI_AFILIADO, 2)
+                 AND N.TIPO_DOCUMENTO_EMPLEADO = SUBSTR(INDP.DNI_AFILIADO, 1,1)
+                 AND N.NMPERIODO = TO_CHAR(TO_DATE(INDP.NMPERIODO, 'YYYYMM'), 'MMYYYY')
+                 AND N.CDTIPO_AFILIADO = INDP.CDTIPO_COTIZANTE
+                 AND CA.CDTIPO_PLANILLA IN ('I', 'A', 'M', 'Y', 'N')
+                 AND N.NMFORMULARIO_PAGO = CA.NMFORMULARIO_PAGO
+                 AND CA.NMPERIODO = N.NMPERIODO
+                 AND N.PTCOTIZACION > 0
+                 AND NVL(CA.CDLEY, '1747') = '2388'),
+            INDEP_1747 AS
+             (SELECT INDP.DNI_AFILIADO,
+                     INDP.CDTIPO_COTIZANTE,
+               NVL(CA.CDLEY, '1747') CDLEY,
+                     NVL(N.PTINGRESO_BASE_LIQ, 0) PTINGRESO_BASE_LIQ
+                FROM T094_NOVEDADES                 N,
+                     T094_CONTROL_AUTOLIQUIDACIONES CA,
+                     INDEP_CON_PAGOS_PENDIENTES     INDP
+               WHERE N.DNI_EMPLEADO = SUBSTR(INDP.DNI_AFILIADO, 2)
+                 AND N.TIPO_DOCUMENTO_EMPLEADO = SUBSTR(INDP.DNI_AFILIADO, 1,1)
+                 AND N.NMPERIODO = TO_CHAR(TO_DATE(INDP.NMPERIODO, 'YYYYMM'), 'MMYYYY')
+                 AND N.CDTIPO_AFILIADO = INDP.CDTIPO_COTIZANTE
+                 AND CA.CDTIPO_PLANILLA IN ('I', 'A', 'M', 'Y', 'N')
+                 AND N.NMFORMULARIO_PAGO = CA.NMFORMULARIO_PAGO
+                 AND CA.NMPERIODO = N.NMPERIODO
+                 AND NVL(CA.CDLEY, '1747') = '2388'
+                 AND NOT (NVL(N.SNSLN, 'N') = 'S' OR NVL(N.SNSLN, 'N') = 'X' OR
+                      NVL(N.SNIGE, 'N') = 'S' OR NVL(N.SNIGE, 'N') = 'X' OR
+                      NVL(N.SNLMA, 'N') = 'S' OR NVL(N.SNLMA, 'N') = 'X' OR
+                      NVL(N.SNVAC, 'N') = 'S' OR NVL(N.SNVAC, 'N') = 'X' OR
+                      NVL(N.SNVAC, 'N') = 'L' OR NVL(N.SNCXS, 'N') = 'S' OR
+                      NVL(N.SNCXS, 'N') = 'X' OR NVL(N.NMIRP, 0) > 0)
+              UNION
+              SELECT INDP.DNI_AFILIADO,
+                     INDP.CDTIPO_COTIZANTE,
+               NVL(CA.CDLEY, '1747') CDLEY,
+                     NVL(N.PTINGRESO_BASE_LIQ, 0) PTINGRESO_BASE_LIQ
+                FROM T094_NOVEDADES                 N,
+                     T094_CONTROL_AUTOLIQUIDACIONES CA,
+                     INDEP_CON_PAGOS_PENDIENTES     INDP
+               WHERE N.DNI_EMPLEADO = SUBSTR(INDP.DNI_AFILIADO, 2)
+                 AND N.TIPO_DOCUMENTO_EMPLEADO = SUBSTR(INDP.DNI_AFILIADO, 1,1)                 
+                 AND N.NMPERIODO = TO_CHAR(TO_DATE(INDP.NMPERIODO, 'YYYYMM'), 'MMYYYY')
+                 AND N.CDTIPO_AFILIADO = INDP.CDTIPO_COTIZANTE
+                 AND CA.CDTIPO_PLANILLA IN ('I', 'A', 'M', 'Y', 'N')
+                 AND N.NMFORMULARIO_PAGO = CA.NMFORMULARIO_PAGO
+                 AND CA.NMPERIODO = N.NMPERIODO
+                 AND NVL(CA.CDLEY, '1747') = '1747'
+                 AND N.PTCOTIZACION > 0
+              UNION
+              SELECT INDP.DNI_AFILIADO,
+                     INDP.CDTIPO_COTIZANTE,
+               NVL(CA.CDLEY, '1747') CDLEY,
+                     NVL(N.PTINGRESO_BASE_LIQ, 0) PTINGRESO_BASE_LIQ
+                FROM T094_NOVEDADES                 N,
+                     T094_CONTROL_AUTOLIQUIDACIONES CA,
+                     INDEP_CON_PAGOS_PENDIENTES     INDP
+               WHERE N.DNI_EMPLEADO = SUBSTR(INDP.DNI_AFILIADO, 2)
+                 AND N.TIPO_DOCUMENTO_EMPLEADO = SUBSTR(INDP.DNI_AFILIADO, 1,1)               
+                 AND N.NMPERIODO = TO_CHAR(TO_DATE(INDP.NMPERIODO, 'YYYYMM'), 'MMYYYY')
+                 AND N.CDTIPO_AFILIADO = INDP.CDTIPO_COTIZANTE
+                 AND CA.CDTIPO_PLANILLA IN ('I', 'A', 'M', 'Y', 'N')
+                 AND N.NMFORMULARIO_PAGO = CA.NMFORMULARIO_PAGO
+                 AND CA.NMPERIODO = N.NMPERIODO
+                 AND N.PTCOTIZACION > 0)
+        SELECT Q.DNI_AFILIADO, 
+               Q.CDTIPO_COTIZANTE, 
+               Q.IBC 
+               FROM (         
+                SELECT DNI_AFILIADO, 
+                        CDTIPO_COTIZANTE,
+                        SUM(PTINGRESO_BASE_LIQ) IBC
+                            FROM INDEP_2388
+                            WHERE (SELECT * FROM EXISTE_RES_1747) = 0
+                            GROUP BY DNI_AFILIADO, CDTIPO_COTIZANTE
+                UNION
+                SELECT DNI_AFILIADO, 
+                       CDTIPO_COTIZANTE,
+                       SUM(PTINGRESO_BASE_LIQ) IBC
+                           FROM INDEP_1747
+                            WHERE (SELECT * FROM EXISTE_RES_1747) > 0
+                            GROUP BY DNI_AFILIADO, CDTIPO_COTIZANTE
+               ) Q WHERE Q.IBC > (SELECT TOPE FROM CALCULO_TOPE_IBC)             
+        ]]>
+    </entry>
+    
+    <entry key="marcar.pago.estadoCuenta.independiente">
+        <![CDATA[    
+            UPDATE TCPG_ESTADO_CUENTA SET SNEXISTE_PAGO = 'S', 
+                        FEMODIFICA = SYSDATE,
+                        DNI_MODIFICA =:dniModifica
+                   WHERE DNI_AFILIADO =:dniAfiliado
+                     AND CDTIPO_COTIZANTE =:tipoCotizante
+                     AND CDTIPO_AFILIADO = '02'
+                     AND NMPERIODO_GENERACION = :periodo--TO_CHAR(SYSDATE, 'YYYYMM') 
+          ]]>
+    </entry>
+    
+    <entry key="actualizar.estado.estadoCuenta">
+        <![CDATA[    
+            UPDATE TCPG_ESTADO_CUENTA SET 
+                CDESTADO_PAGO = :estadoPago, 
+                FEMODIFICA = SYSDATE,
+                DNI_MODIFICA =:dniModifica
+            WHERE 
+                NMPOLIZA = :poliza
+                AND DNI_AFILIADO =:dni
+                AND CDTIPO_COTIZANTE =:tipoCotizante
+                AND NMPERIODO = :periodo
+          ]]>
+    </entry>
+    
+    <entry key="actualizar.estado.estadoCuenta.enrqs">
+        <![CDATA[    
+            UPDATE TCPG_ESTADO_CUENTA SET 
+                CDESTADO_PAGO = :estadoPago, 
+                FEMODIFICA = SYSDATE,
+                DNI_MODIFICA = :dniModifica,
+                PTSALDO = :saldo
+            WHERE 
+                NMPOLIZA = :poliza
+                AND DNI_AFILIADO =:dni
+                AND CDTIPO_COTIZANTE =:tipoCotizante
+                AND NMPERIODO = :periodo
+          ]]>
+    </entry>
+    
+    <entry key="consulta.salarioMinimo.vigente.periodo">
+    <![CDATA[
+        SELECT PKGAFI_FUNCIONES_OPERACIONES.FUNAFI_SALARIO_MINIMO(:periodo) FROM dual 
+    ]]>
+    </entry>
+    
+    <entry key="obtener.condiciones.afiliados">
+    <![CDATA[
+        SELECT 
+            CR.CDTIPO_COTIZANTE,
+            CR.PTULTIMO_IBC_COTIZADO,
+            CR.PTSALARIO,
+            CC.PTINGRESO_MAX_BASE_LIQ,
+            CC.PTINGRESO_MIN_BASE_LIQ,
+            CC.CDTIPO_GENERACION,
+            CC.CDTIPO_TASA,
+            CC.SNINDICADOR_PROPORCIONAL_DIAS,
+            CC.CDTIPO_NOVEDAD,
+            CC.CDTIPO_AFILIADO
+          FROM T094_CUERPOLIZA_RIESGO CR
+          INNER JOIN TCPG_CONDICIONES_COTIZA CC ON CC.CDTIPO_COTIZANTE = CR.CDTIPO_COTIZANTE
+          WHERE CR.FEBAJA >= TO_DATE(:periodo,'MMYYYY')
+                    AND CR.FEALTA < LAST_DAY(TO_DATE(:periodo,'MMYYYY')) + 1
+                    AND CR.DNI = :dni
+                    AND CR.NPOLIZA = :poliza
+          ORDER BY CC.PTINGRESO_MAX_BASE_LIQ DESC
+    ]]>
+    </entry>
+    
+     <!-- METODO DEPRECATED, NO SE USA -->
+     <entry key="consulta.maxTasa.planillasN">
+    <![CDATA[
+        SELECT nvl(MAX(N.POCOTIZACION_ATEP),0) TASA
+        FROM TREC_NOVEDADES_PLANILLA_N N, T094_CONTROL_AUTOLIQUIDACIONES CA
+        WHERE N.DNI_EMPLEADO = :dniAfiliado
+           AND N.DNI_EMPLEADOR = :nroDocEmpleador
+           AND N.NMPERIODO = SUBSTR(:periodo, 5, 2) || SUBSTR(:periodo, 1, 4)
+           AND N.CDTIPO_DCTO_EMPLEADOR = :tipoDocEmpleador
+           AND N.NMFORMULARIO_PAGO = CA.NMFORMULARIO_PAGO
+           AND N.CDTIPO_AFILIADO = :tipoCotizante
+           AND N.CDTIPOAJUSTE = 'C'
+           AND N.FEREVERSA IS NULL              
+           AND NOT (NVL(N.SNSLN,'N') = 'S' OR NVL(N.SNSLN,'N') = 'X' OR
+                 NVL(N.SNIGE,'N') = 'S' OR NVL(N.SNIGE,'N') = 'X' OR
+                 NVL(N.SNLMA,'N') = 'S' OR NVL(N.SNLMA,'N') = 'X' OR
+                 NVL(N.SNVAC,'N') = 'S' OR NVL(N.SNVAC,'N') = 'X' OR NVL(N.SNVAC,'N') = 'L' OR
+                 NVL(N.SNCXS,'N') = 'S' OR NVL(N.SNCXS,'N') = 'X' OR
+                 NVL(N.NMIRP,0)> 0)
+           AND N.NMFORMULARIO_PAGO IN (SELECT REGEXP_SUBSTR (:cadenaFormularios, '[^,]+', 1,LEVEL)
+                    FROM DUAL
+                    CONNECT BY LEVEL <= LENGTH (REGEXP_REPLACE (:cadenaFormularios, '[^,]+'))  + 1)
+    ]]>
+    </entry>
+    
+    <entry key="actualizacion.ultimosValoresCotizados">
+    <![CDATA[
+        UPDATE T094_CUERPOLIZA_RIESGO SET  
+            PTULTIMO_IBC_COTIZADO = :ultimoIBC,
+            PTSALARIO = :ultimoSalario,
+            NMULTIMO_PERIODO_COTIZADO = :ultimoPeriodo,
+            DNI_MODIFICA = :dniModifica,
+            FEULTIMA_ACTUALIZACION = SYSDATE,
+            DSEPS = :eps,
+            DSAFP = :afp
+        WHERE DNI = :dniAfiliado AND CDTIPO_COTIZANTE = :tipoCotizante AND NPOLIZA = :poliza
+        AND CDTIPO_COTIZANTE = :tipoCotizante
+    ]]>
+    </entry>
+    
+    <entry key="insertar.estadoCuenta.metadata">
+    <![CDATA[
+        INSERT
+        INTO
+          TCPG_ESTADO_CUENTA_META
+          (
+            NMCONSECUTIVO,
+            NMPOLIZA,
+            NMPERIODO,
+            DNI_AFILIADO,
+            CDTIPO_COTIZANTE,
+            DSCAMPO,
+            DSVALOR,
+            FEINGRESA,
+            DNI_INGRESA
+          )
+          VALUES
+          (
+            SEQ_CPG_ESTADO_CUENTA_META.NEXTVAL,
+            :poliza,
+            :periodo,
+            :dniAfiliado,
+            :tipoCotizante,
+            :campo,
+            :valor,
+            sysdate,
+            :dniIngresa
+          )
+    ]]>
+    </entry>
+    
+    <entry key="borrar.estadoCuenta.metadata.campo">
+    <![CDATA[
+        DELETE
+        FROM
+          TCPG_ESTADO_CUENTA_META
+        WHERE
+            NMPOLIZA         =:poliza
+        AND NMPERIODO        =:periodo
+        AND DNI_AFILIADO     =:dniAfiliado
+        AND CDTIPO_COTIZANTE =:tipoCotizante
+        AND CDTIPO_AFILIADO  =:tipoAfiliado      
+        AND DSCAMPO          =:campo
+     ]]>
+    </entry>
+    
+    
+    <entry key="consultar.estadoCuenta">
+    <![CDATA[
+        SELECT
+          DSVALOR
+        FROM
+          TCPG_ESTADO_CUENTA_META
+        WHERE
+            NMPOLIZA         =:poliza
+        AND NMPERIODO        =:periodo
+        AND DNI_AFILIADO     =:dniAfiliado
+        AND CDTIPO_COTIZANTE =:tipoCotizante
+        AND CDTIPO_AFILIADO  =:tipoAfiliado      
+        AND DSCAMPO          =:campo
+     ]]>
+    </entry>
+    
+    <entry key="consultar.estadoCuenta.todosloscampos">
+    <![CDATA[
+        SELECT
+          DSCAMPO,DSVALOR
+        FROM
+          TCPG_ESTADO_CUENTA_META
+        WHERE
+            NMPOLIZA         =:poliza
+        AND NMPERIODO        =:periodo
+        AND DNI_AFILIADO     =:dniAfiliado
+        AND CDTIPO_COTIZANTE =:tipoCotizante
+        AND CDTIPO_AFILIADO  =:tipoAfiliado
+     ]]>
+    </entry>    
+    
+    <entry key="consulta.integrador.afiliados.reversados">
+    <![CDATA[
+    WITH AFILIA_FORMULARIOS AS ( 
+        SELECT DISTINCT
+            TO_CHAR(TO_DATE(N.NMPERIODO, 'MMYYYY'), 'YYYYMM') NMPERIODO,
+            N.TIPO_DOCUMENTO_EMPLEADO||N.DNI_EMPLEADO DNI,
+            N.CDTIPO_AFILIADO CDTIPO_COTIZANTEN,
+            N.NPOLIZA
+            FROM T094_NOVEDADES_CARGAS_BORRADAS N
+            WHERE N.NMFORMULARIO_PAGO = :numeroFormulario
+            AND N.DNI_EMPLEADO = NVL(:afiliado,N.DNI_EMPLEADO)
+            AND N.TIPO_DOCUMENTO_EMPLEADO = NVL(:tipoDocumento,N.TIPO_DOCUMENTO_EMPLEADO)
+            AND N.NMPERIODO = NVL(:periodo,N.NMPERIODO)
+        ), AFILIADOS AS (
+            SELECT DISTINCT Q.*, 
+                CR.CDTIPO_COTIZANTE, 
+                CR.CDTIPO_AFILIADO,
+                CR.NCERTIFICADO,
+                CR.CDSUBTIPO_COTIZANTE,
+                NVL(CR.PTSALARIO, 0) PTSALARIO,
+                NVL(CR.ptultimo_ibc_cotizado, 0) PTULTIMO_IBC_COTIZADO,
+                CASE WHEN CR.CDTIPO_COTIZANTE||Cr.CDTIPO_AFILIADO IS NULL THEN '3'
+                     WHEN CR.CDTIPO_COTIZANTE IS NULL THEN '2'
+                     WHEN CR.CDTIPO_AFILIADO IS NULL THEN '1'
+                    ELSE '' END ERROR,
+                CR.FEALTA,
+                CR.FEBAJA,
+                SUBSTR(CP.DNI,2) DNI_EMPLEADOR,
+                SUBSTR(CP.DNI,0,1) TIPODOC_EMPLEADOR
+            FROM
+               T094_CUERPOLIZA_RIESGO CR
+                INNER JOIN T094_CUERPOLIZA cp ON cp.NPOLIZA = cr.NPOLIZA
+                INNER JOIN AFILIA_FORMULARIOS Q ON CR.NPOLIZA = Q.NPOLIZA AND CR.DNI = Q.DNI
+                AND (
+                        (Q.CDTIPO_COTIZANTEN <> '23' and CR.CDTIPO_COTIZANTE in (select CDTIPO_COTIZANTE FROM TCPG_CONDICIONES_COTIZA K WHERE  K.cdtipo_afiliado = CR.cdtipo_afiliado and  K.CDTIPO_COTIZANTE <> '23'))
+                        OR
+                        (Q.CDTIPO_COTIZANTEN = '23' and CR.CDTIPO_COTIZANTE = Q.CDTIPO_COTIZANTEN )
+                )
+                --AND CR.FEALTA<=LAST_DAY(TO_DATE(Q.NMPERIODO,'YYYYMM'))
+                --AND CR.FEBAJA>=TO_DATE(Q.NMPERIODO,'YYYYMM')
+        ),
+        AFILIADOS_CONDICIONES AS (
+        
+            SELECT AF.*,
+                   CC.PTINGRESO_MAX_BASE_LIQ,
+                   CC.PTINGRESO_MIN_BASE_LIQ,
+                   CC.CDTIPO_GENERACION,
+                   CC.CDTIPO_TASA, 
+                   CC.SNINDICADOR_PROPORCIONAL_DIAS,
+                   CC.CDTIPO_NOVEDAD
+                   FROM AFILIADOS AF LEFT JOIN TCPG_CONDICIONES_COTIZA CC
+                   ON  CC.CDTIPO_COTIZANTE = AF.CDTIPO_COTIZANTE
+        )
+        SELECT DISTINCT FC.*, 
+               AC.NMRO_COBERTURAS,
+               AC.CSVTIPOS_COTIZANTES
+               FROM AFILIADOS_CONDICIONES FC LEFT JOIN (
+                     SELECT NPOLIZA, 
+                            DNI, 
+                            CDTIPO_AFILIADO,
+                            FEALTA,
+                            FEBAJA,
+                            COUNT(DISTINCT AC.CDTIPO_COTIZANTE) OVER(PARTITION BY NPOLIZA, DNI,  DECODE(AC.CDTIPO_COTIZANTE, '23', '03', AC.CDTIPO_AFILIADO)) NMRO_COBERTURAS,
+                            LISTAGG(AC.CDTIPO_COTIZANTE,',') WITHIN GROUP(ORDER BY CDTIPO_COTIZANTE) OVER (PARTITION BY NPOLIZA, DNI, CDTIPO_AFILIADO) CSVTIPOS_COTIZANTES 
+                            FROM T094_CUERPOLIZA_RIESGO AC
+                    ) AC ON  AC.DNI = FC.DNI
+                         AND AC.CDTIPO_AFILIADO = FC.CDTIPO_AFILIADO
+                         AND AC.NPOLIZA = FC.NPOLIZA
+                         AND AC.FEALTA = FC.FEALTA
+                         AND AC.FEBAJA = FC.FEBAJA
+                    ORDER BY FC.DNI, FC.CDTIPO_AFILIADO, FC.FEALTA DESC 
+         ]]>
+    </entry>
+    
+    <entry key="consulta.integrador.afiliados.noreversados">
+    <![CDATA[
+    WITH AFILIA_FORMULARIOS AS ( 
+        SELECT DISTINCT
+            TO_CHAR(TO_DATE(N.NMPERIODO, 'MMYYYY'), 'YYYYMM') NMPERIODO,
+            N.TIPO_DOCUMENTO_EMPLEADO||N.DNI_EMPLEADO DNI,
+            N.CDTIPO_AFILIADO CDTIPO_COTIZANTEN,
+            N.NPOLIZA
+            FROM T094_NOVEDADES N
+            WHERE N.NMFORMULARIO_PAGO = :numeroFormulario
+            AND N.DNI_EMPLEADO = NVL(:afiliado,N.DNI_EMPLEADO)
+            AND N.TIPO_DOCUMENTO_EMPLEADO = NVL(:tipoDocumento,N.TIPO_DOCUMENTO_EMPLEADO)
+            AND N.NMPERIODO = NVL(:periodo,N.NMPERIODO)
+        ), AFILIADOS AS (
+            SELECT DISTINCT Q.*, 
+                CR.CDTIPO_COTIZANTE, 
+                CR.CDTIPO_AFILIADO,
+                CR.NCERTIFICADO,
+                CR.CDSUBTIPO_COTIZANTE,
+                NVL(CR.PTSALARIO, 0) PTSALARIO,
+                NVL(CR.ptultimo_ibc_cotizado, 0) PTULTIMO_IBC_COTIZADO,
+                CASE WHEN CR.CDTIPO_COTIZANTE||Cr.CDTIPO_AFILIADO IS NULL THEN '3'
+                     WHEN CR.CDTIPO_COTIZANTE IS NULL THEN '2'
+                     WHEN CR.CDTIPO_AFILIADO IS NULL THEN '1'
+                    ELSE '' END ERROR,
+                CR.FEALTA,
+                CR.FEBAJA,
+                SUBSTR(CP.DNI,2) DNI_EMPLEADOR,
+                SUBSTR(CP.DNI,0,1) TIPODOC_EMPLEADOR
+            FROM
+               T094_CUERPOLIZA_RIESGO CR
+                INNER JOIN T094_CUERPOLIZA cp ON cp.NPOLIZA = cr.NPOLIZA
+                INNER JOIN AFILIA_FORMULARIOS Q ON CR.NPOLIZA = Q.NPOLIZA AND CR.DNI = Q.DNI
+                AND (
+                        (Q.CDTIPO_COTIZANTEN <> '23' and CR.CDTIPO_COTIZANTE in (select CDTIPO_COTIZANTE FROM TCPG_CONDICIONES_COTIZA K WHERE  K.cdtipo_afiliado = CR.cdtipo_afiliado and  K.CDTIPO_COTIZANTE <> '23'))
+                        OR
+                        (Q.CDTIPO_COTIZANTEN = '23' and CR.CDTIPO_COTIZANTE = Q.CDTIPO_COTIZANTEN )
+                )
+                --AND CR.FEALTA<=LAST_DAY(TO_DATE(Q.NMPERIODO,'YYYYMM'))
+                --AND CR.FEBAJA>=TO_DATE(Q.NMPERIODO,'YYYYMM')
+        ),
+        AFILIADOS_CONDICIONES AS (
+        
+            SELECT AF.*,
+                   CC.PTINGRESO_MAX_BASE_LIQ,
+                   CC.PTINGRESO_MIN_BASE_LIQ,
+                   CC.CDTIPO_GENERACION,
+                   CC.CDTIPO_TASA, 
+                   CC.SNINDICADOR_PROPORCIONAL_DIAS,
+                   CC.CDTIPO_NOVEDAD
+                   FROM AFILIADOS AF LEFT JOIN TCPG_CONDICIONES_COTIZA CC
+                   ON  CC.CDTIPO_COTIZANTE = AF.CDTIPO_COTIZANTE
+        )
+        SELECT DISTINCT FC.*,
+               AC.NMRO_COBERTURAS,
+               AC.CSVTIPOS_COTIZANTES
+               FROM AFILIADOS_CONDICIONES FC LEFT JOIN (
+                     SELECT NPOLIZA, 
+                            DNI, 
+                            CDTIPO_AFILIADO,
+                            FEALTA,
+                            FEBAJA,
+                            COUNT(DISTINCT AC.CDTIPO_COTIZANTE) OVER(PARTITION BY NPOLIZA, DNI,  DECODE(AC.CDTIPO_COTIZANTE, '23', '03', AC.CDTIPO_AFILIADO)) NMRO_COBERTURAS,
+                            LISTAGG(AC.CDTIPO_COTIZANTE,',') WITHIN GROUP(ORDER BY CDTIPO_COTIZANTE) OVER (PARTITION BY NPOLIZA, DNI, CDTIPO_AFILIADO) CSVTIPOS_COTIZANTES 
+                            FROM T094_CUERPOLIZA_RIESGO AC
+                    ) AC ON  AC.DNI = FC.DNI
+                         AND AC.CDTIPO_AFILIADO = FC.CDTIPO_AFILIADO
+                         AND AC.NPOLIZA = FC.NPOLIZA
+                         AND AC.FEALTA = FC.FEALTA
+                         AND AC.FEBAJA = FC.FEBAJA
+                    ORDER BY FC.DNI, FC.CDTIPO_AFILIADO, FC.FEALTA DESC 
+         ]]>
+    </entry>
+    
+    <entry key="consulta.integrador.afiliados.flujo.completo">
+    <![CDATA[
+        WITH AFILIA_FORMULARIOS AS ( 
+            SELECT DISTINCT
+                TO_CHAR(TO_DATE(N.NMPERIODO, 'MMYYYY'), 'YYYYMM') NMPERIODO,
+                N.TIPO_DOCUMENTO_EMPLEADO||N.DNI_EMPLEADO DNI,
+                N.CDTIPO_AFILIADO CDTIPO_COTIZANTEN,
+                N.NPOLIZA, N.NMFORMULARIO_PAGO
+                FROM T094_NOVEDADES N
+                WHERE N.NMFORMULARIO_PAGO = NVL(:numeroFormulario,N.NMFORMULARIO_PAGO)
+                AND N.DNI_EMPLEADO = NVL(:afiliado,N.DNI_EMPLEADO)
+                AND N.TIPO_DOCUMENTO_EMPLEADO = NVL(:tipoDocumento,N.TIPO_DOCUMENTO_EMPLEADO)
+                AND N.NMPERIODO = TO_CHAR(TO_DATE(:periodo, 'YYYYMM'), 'MMYYYY')
+            ), AFILIADOS AS (
+                SELECT DISTINCT Q.*, 
+                    CR.CDTIPO_COTIZANTE, 
+                    CR.CDTIPO_AFILIADO,
+                    CR.NCERTIFICADO,
+                    CR.CDSUBTIPO_COTIZANTE,
+                    NVL(CR.PTSALARIO, 0) PTSALARIO,
+                    NVL(CR.ptultimo_ibc_cotizado, 0) PTULTIMO_IBC_COTIZADO,
+                    CASE WHEN CR.CDTIPO_COTIZANTE||Cr.CDTIPO_AFILIADO IS NULL THEN '3'
+                         WHEN CR.CDTIPO_COTIZANTE IS NULL THEN '2'
+                         WHEN CR.CDTIPO_AFILIADO IS NULL THEN '1'
+                        ELSE '' END ERROR,
+                    CR.FEALTA,
+                    CR.FEBAJA,
+                    SUBSTR(CP.DNI,2) DNI_EMPLEADOR,
+                    SUBSTR(CP.DNI,0,1) TIPODOC_EMPLEADOR
+                FROM
+                   T094_CUERPOLIZA_RIESGO CR
+                    INNER JOIN T094_CUERPOLIZA cp ON cp.NPOLIZA = cr.NPOLIZA
+                    INNER JOIN AFILIA_FORMULARIOS Q ON CR.NPOLIZA = Q.NPOLIZA AND CR.DNI = Q.DNI
+                    AND (
+                            (Q.CDTIPO_COTIZANTEN <> '23' and CR.CDTIPO_COTIZANTE in (select CDTIPO_COTIZANTE FROM TCPG_CONDICIONES_COTIZA K WHERE  K.cdtipo_afiliado = CR.cdtipo_afiliado and  K.CDTIPO_COTIZANTE <> '23'))
+                            OR
+                            (Q.CDTIPO_COTIZANTEN = '23' and CR.CDTIPO_COTIZANTE = Q.CDTIPO_COTIZANTEN )
+                    )
+                    AND CR.FEALTA<=LAST_DAY(TO_DATE(Q.NMPERIODO,'YYYYMM'))
+                    AND CR.FEBAJA>=TO_DATE(Q.NMPERIODO,'YYYYMM')
+            ),
+            AFILIADOS_CONDICIONES AS (
+            
+                SELECT AF.*,
+                       CC.PTINGRESO_MAX_BASE_LIQ,
+                       CC.PTINGRESO_MIN_BASE_LIQ,
+                       CC.CDTIPO_GENERACION,
+                       CC.CDTIPO_TASA, 
+                       CC.SNINDICADOR_PROPORCIONAL_DIAS,
+                       CC.CDTIPO_NOVEDAD
+                       FROM AFILIADOS AF LEFT JOIN TCPG_CONDICIONES_COTIZA CC
+                       ON  CC.CDTIPO_COTIZANTE = AF.CDTIPO_COTIZANTE
+            )
+            SELECT distinct AC.*, 
+                 COUNT(1) OVER(PARTITION BY DNI, DECODE(AC.CDTIPO_COTIZANTE, '23', '03', AC.CDTIPO_AFILIADO)) NMRO_COBERTURAS,
+                 LISTAGG(AC.CDTIPO_COTIZANTE,',') WITHIN GROUP(ORDER BY CDTIPO_COTIZANTE) OVER (PARTITION BY NPOLIZA, DNI, CDTIPO_AFILIADO) CSVTIPOS_COTIZANTES
+                 FROM AFILIADOS_CONDICIONES AC
+    ]]>
+    </entry>
+    
+    <entry key="consulta.integrador.afiliado">
+    <![CDATA[
+    WITH AFILIADOS AS (
+            SELECT  
+                CR.DNI DNI,
+                CR.CDTIPO_AFILIADO,
+                CR.CDTIPO_COTIZANTE,
+                CR.NCERTIFICADO,
+                CR.CDSUBTIPO_COTIZANTE,
+                NVL(CR.PTSALARIO, 0) PTSALARIO,
+                NVL(CR.ptultimo_ibc_cotizado, 0) ptultimo_ibc_cotizado,
+                CASE WHEN CR.CDTIPO_COTIZANTE||Cr.CDTIPO_AFILIADO IS NULL THEN '3'
+                     WHEN CR.CDTIPO_COTIZANTE IS NULL THEN '2'
+                     WHEN CR.CDTIPO_AFILIADO IS NULL THEN '1'
+                    ELSE '' END ERROR,
+                CR.FEALTA,
+                CR.FEBAJA,
+                CR.NPOLIZA,
+                SUBSTR(CP.DNI,2) DNI_EMPLEADOR,
+                SUBSTR(CP.DNI,0,1) TIPODOC_EMPLEADOR
+            FROM
+                T094_CUERPOLIZA_RIESGO CR
+                INNER JOIN T094_CUERPOLIZA cp ON cp.NPOLIZA = cr.NPOLIZA
+            WHERE
+                CR.NPOLIZA = NVL(:poliza, CR.NPOLIZA)
+                AND CR.DNI = :dni
+                AND CR.NCERTIFICADO = NVL(:certificado, CR.NCERTIFICADO)
+                AND CR.CDTIPO_AFILIADO = NVL(:tipoAfiliado, CR.CDTIPO_AFILIADO)
+                AND CR.CDTIPO_COTIZANTE = NVL(:tipoCotizante, CR.CDTIPO_COTIZANTE)
+                ORDER BY CR.FEALTA desc
+        ),
+        AFILIADOS_CONDICIONES AS (
+        
+            SELECT AF.*,
+                   CC.PTINGRESO_MAX_BASE_LIQ,
+                   CC.PTINGRESO_MIN_BASE_LIQ,
+                   CC.CDTIPO_GENERACION,
+                   CC.CDTIPO_TASA, 
+                   CC.SNINDICADOR_PROPORCIONAL_DIAS,
+                   CC.CDTIPO_NOVEDAD
+                   FROM AFILIADOS AF LEFT JOIN TCPG_CONDICIONES_COTIZA CC
+                   ON  CC.CDTIPO_COTIZANTE = AF.CDTIPO_COTIZANTE
+                       AND CC.CDTIPO_AFILIADO = AF.CDTIPO_AFILIADO 
+        )
+        -- depura los registros filtrando por orden de prioridad
+        SELECT DISTINCT FC.*,
+               AC.NMRO_COBERTURAS,
+               AC.CSVTIPOS_COTIZANTES
+               FROM AFILIADOS_CONDICIONES FC LEFT JOIN (
+                     SELECT NPOLIZA, 
+                            DNI, 
+                            CDTIPO_AFILIADO,
+                            FEALTA,
+                            FEBAJA,
+                            COUNT(DISTINCT AC.CDTIPO_COTIZANTE) OVER(PARTITION BY NPOLIZA, DNI,  DECODE(AC.CDTIPO_COTIZANTE, '23', '03', AC.CDTIPO_AFILIADO)) NMRO_COBERTURAS,
+                            LISTAGG(AC.CDTIPO_COTIZANTE,',') WITHIN GROUP(ORDER BY CDTIPO_COTIZANTE) OVER (PARTITION BY NPOLIZA, DNI, CDTIPO_AFILIADO) CSVTIPOS_COTIZANTES 
+                            FROM T094_CUERPOLIZA_RIESGO AC
+                            WHERE AC.NPOLIZA = NVL(:poliza, AC.NPOLIZA)
+                            AND AC.DNI = :dni
+                            AND AC.CDTIPO_AFILIADO = NVL(:tipoAfiliado, AC.CDTIPO_AFILIADO)
+                            AND AC.CDTIPO_COTIZANTE = NVL(:tipoCotizante, AC.CDTIPO_COTIZANTE)
+                    ) AC ON  AC.DNI = FC.DNI
+                         AND AC.CDTIPO_AFILIADO = FC.CDTIPO_AFILIADO
+                         AND AC.NPOLIZA = FC.NPOLIZA
+                         AND AC.FEALTA = FC.FEALTA
+                         AND AC.FEBAJA = FC.FEBAJA
+                    ORDER BY FC.DNI, FC.CDTIPO_AFILIADO, FC.FEALTA DESC
+         ]]>
+    </entry>
+    
+    <!-- METODO DEPRECATED, NO SE USA -->
+    <entry key="buscar.numero.formulario.afiliado">
+        <![CDATA[
+            SELECT 
+            N.NMFORMULARIO_PAGO
+    FROM T094_CONTROL_NOVEDADES CN
+            INNER JOIN T094_NOVEDADES N ON CN.NMFORMULARIO_PAGO = N.NMFORMULARIO_PAGO
+            INNER JOIN T094_CONTROL_AUTOLIQUIDACIONES CA ON CA.NMFORMULARIO_PAGO = CN.NMFORMULARIO_PAGO
+    WHERE NVL(CN.SNPROCESADO, 'N') = 'N'
+            AND NVL(N.SNPROCESADO, 'N') = 'N' 
+    --        AND N.NMFORMULARIO_PAGO = 1002169086 
+            AND CA.NPOLIZA = :poliza
+    --        AND N.CDTIPO_AFILIADO = '01'
+            AND N.TIPO_DOCUMENTO_EMPLEADO = :tipo_documento
+            AND N.DNI_EMPLEADO = :documento
+    --        AND N.NMPERIODO = '122017'
+         ]]>
+    </entry>
+    
+    <entry key="buscar.numero.formulario.afiliado.periodo">
+        <![CDATA[
+            SELECT NMFORMULARIO_PAGO FROM (
+                SELECT 
+                    N.NMFORMULARIO_PAGO
+                    FROM  T094_NOVEDADES N 
+                        INNER JOIN TCPG_CONDICIONES_COTIZA CC ON CC.CDTIPO_COTIZANTE = N.CDTIPO_AFILIADO
+                    WHERE N.NPOLIZA = :poliza
+                    AND N.TIPO_DOCUMENTO_EMPLEADO = :tipo_documento
+                    AND N.DNI_EMPLEADO = :documento
+                    AND N.NMPERIODO = NVL(TO_CHAR( TO_DATE( :periodo, 'YYYYMM' ), 'MMYYYY'), NMPERIODO)
+                    AND CC.CDTIPO_AFILIADO = NVL(:tipoAfiliado,CC.CDTIPO_AFILIADO)
+                    ORDER BY N.FEPROCESO DESC
+             ) Q
+         ]]>
+    </entry>
+    
+     <entry key="consultar.resultado.reproceso">
+    <![CDATA[
+        -- busca los afiliados reportados en el formulario    
+      WITH AfiliadosProcesados AS (
+          SELECT DISTINCT
+                TO_CHAR( TO_DATE( N.NMPERIODO, 'MMYYYY' ), 'YYYYMM' ) PERIODO,
+                N.NMPERIODO PERIODO2,
+                N.TIPO_DOCUMENTO_EMPLEADO||N.DNI_EMPLEADO DNI,
+                N.CDTIPO_AFILIADO tipoCotizante,
+                NVL(N.PTINGRESO_BASE_LIQ,0) IBC,
+                CA.NPOLIZA
+             FROM T094_CONTROL_NOVEDADES CN
+                INNER JOIN T094_NOVEDADES N ON CN.NMFORMULARIO_PAGO = N.NMFORMULARIO_PAGO
+                INNER JOIN T094_CONTROL_AUTOLIQUIDACIONES CA ON CA.NMFORMULARIO_PAGO = CN.NMFORMULARIO_PAGO
+             WHERE 
+                 N.NMFORMULARIO_PAGO = :numeroFormulario
+                ),
+          --conteo de afiliados con errores en errores_proceso
+          AfiliadosConError AS (
+             SELECT count(1) total FROM AfiliadosProcesados AP 
+                 INNER JOIN TCPG_ERRORES_PROCESOS EP 
+                    ON AP.PERIODO = EP.NMPERIODO
+                    AND AP.DNI = EP.DNI_AFILIADO
+                    --AND AP.TIPOCOTIZANTE = EP.CDTIPO_COTIZANTE
+                    AND AP.PERIODO = EP.NMPERIODO
+                 WHERE EP.CDCODIGO_ERROR IN ('PE001','PE002','PE003','PE004','PE005','PE006','PE007')
+                 AND EP.CDCODIGO_PROCESO = 'PE'
+         ),
+         --conteo de afiliados con errores en errores_proceso
+          AfiliadosEnRenes AS (
+             SELECT count(1) total FROM AfiliadosProcesados AP 
+                 INNER JOIN TCPG_RENES EP 
+                    ON AP.PERIODO2 = EP.NMPERIODO
+                    AND AP.DNI = EP.DNI_EMPLEADO
+                    AND AP.TIPOCOTIZANTE = EP.CDTIPO_COTIZANTE
+         ),
+         --conteo de afiliados reportados sin pago
+         AfiliadosEnEnrqs AS (
+            SELECT count(1) total FROM AfiliadosProcesados AP 
+                 INNER JOIN TCPG_ESTADO_CUENTA EP 
+                    ON AP.PERIODO2 = EP.NMPERIODO
+                    AND AP.DNI = EP.DNI_AFILIADO
+                    AND AP.TIPOCOTIZANTE = EP.CDTIPO_COTIZANTE
+                    WHERE SNEXISTE_PAGO <> 'S'
+         ),
+         calculo AS (
+            SELECT COUNT(AP.PERIODO) total, SUM(IBC) totalIBC FROM AfiliadosProcesados AP
+         )
+     SELECT ap.total, totalIBC, 
+            (ap.total-ae.total-ar.total-aq.total) buenos, 
+            (ae.total+ar.total+aq.total) malos 
+        FROM calculo AP, AfiliadosConError Ae, AfiliadosEnRenes ar, AfiliadosEnEnrqs aq
+     ]]>
+    </entry>
+    
+    <entry key="buscar.ultimo.periodo">
+        <![CDATA[
+            SELECT NMPERIODO FROM (
+                SELECT NMPERIODO, MAX(to_date(NMPERIODO,'YYYYMM')) AS PE FROM TCPG_ESTADO_CUENTA WHERE 
+                NMPOLIZA = :poliza 
+                AND DNI_AFILIADO = :afiliado
+                AND CDTIPO_COTIZANTE = :tipoCotizante
+                GROUP BY NMPERIODO
+                ORDER BY 2 DESC)
+            WHERE ROWNUM < 2
+         ]]>
+    </entry>
+    
+    <entry key="buscar.ultimo.periodo.fechaBase">
+        <![CDATA[
+            SELECT NMPERIODO FROM (
+                SELECT NMPERIODO, MAX(to_date(NMPERIODO,'YYYYMM')) AS PE FROM TCPG_ESTADO_CUENTA WHERE 
+                NMPOLIZA = :poliza 
+                AND DNI_AFILIADO = :afiliado
+                AND CDTIPO_COTIZANTE = :tipoCotizante
+                AND to_date(NMPERIODO,'YYYYMM')  < :fechaBase
+                GROUP BY NMPERIODO
+                ORDER BY 2 DESC)
+            WHERE ROWNUM < 2
+         ]]>
+    </entry>
+    
+    <entry key="insertar.backup.estado.cuenta">
+        <![CDATA[
+            INSERT INTO TCPG_ESTADO_CUENTA_HCO (NMPOLIZA,DNI_AFILIADO,CDTIPO_COTIZANTE,CDTIPO_AFILIADO,NMDIAS_ESPERADOS,PTCOTIZACION_ESPERADA,PTINGRESO_BASE_LIQ_ESPERADO,PTSALARIO,CDSUCURSAL,CDSUCURSAL_PAGADORA,POTASA_ESPERADA,FEINGRESA,DNI_INGRESA,FEMODIFICA,DNI_MODIFICA,NMPERIODO,SNEXISTE_PAGO,NMCONSECUTIVO,CDTIPO_GENERACION,NMPERIODO_GENERACION,NMDIAS_REPORTADOS,PTCOTIZACION_REPORTADA,POTASA_REPORTADA,PTINGRESO_BASE_LIQ_REPORTADO,DSOBSERVACIONES,CDSUBTIPO_COTIZANTE, NMTOTAL_COBERTURAS, CDESTADO_PAGO, PTSALDO, FELIMITE_PAGO, NMCONSEC_HCO, FEINGRESA_HCO, DNI_INGRESA_HCO) 
+            SELECT  NMPOLIZA,DNI_AFILIADO,CDTIPO_COTIZANTE,CDTIPO_AFILIADO,NMDIAS_ESPERADOS,PTCOTIZACION_ESPERADA,PTINGRESO_BASE_LIQ_ESPERADO,PTSALARIO,CDSUCURSAL,CDSUCURSAL_PAGADORA,POTASA_ESPERADA,FEINGRESA,DNI_INGRESA,FEMODIFICA,DNI_MODIFICA,NMPERIODO,SNEXISTE_PAGO,NMCONSECUTIVO,CDTIPO_GENERACION,NMPERIODO_GENERACION,NMDIAS_REPORTADOS,PTCOTIZACION_REPORTADA,POTASA_REPORTADA,PTINGRESO_BASE_LIQ_REPORTADO,DSOBSERVACIONES,CDSUBTIPO_COTIZANTE,NMTOTAL_COBERTURAS, CDESTADO_PAGO,PTSALDO, FELIMITE_PAGO,
+            SEQ_CPG_ESTADO_CUENTA_HCO.nextval, sysdate, :usuario 
+            FROM TCPG_ESTADO_CUENTA WHERE 
+            NMPOLIZA = :poliza
+            AND DNI_AFILIADO = :afiliado
+            AND CDTIPO_COTIZANTE = :tipoCotizante
+            AND CAST(NMPERIODO AS NUMBER) >= CAST(:periodoInicial as NUMBER)
+            AND CAST(NMPERIODO AS NUMBER) <= CAST(:periodoFinal as NUMBER)
+         ]]>
+    </entry>
+    
+     <entry key="insertar.backup.estado.cuenta.meta">
+        <![CDATA[
+            INSERT INTO TCPG_ESTADO_CTA_META_HCO (NMCONSECUTIVO, NMPOLIZA, NMPERIODO, DNI_AFILIADO, CDTIPO_COTIZANTE, DSCAMPO, DSVALOR, FEINGRESA, DNI_INGRESA, NMCONSEC_HCO, FEINGRESA_HCO, DNI_INGRESA_HCO) 
+            SELECT NMCONSECUTIVO, NMPOLIZA, NMPERIODO, DNI_AFILIADO, CDTIPO_COTIZANTE, DSCAMPO, DSVALOR, FEINGRESA, DNI_INGRESA, 
+            SEQ_CPG_ESTADO_CTA_META_HCO.nextval, sysdate, :usuario 
+            FROM TCPG_ESTADO_CUENTA_META WHERE 
+            NMPOLIZA = :poliza
+            AND DNI_AFILIADO = :afiliado
+            AND CDTIPO_COTIZANTE = :tipoCotizante
+            AND CAST(NMPERIODO AS NUMBER) >= CAST(:periodoInicial as NUMBER)
+            AND CAST(NMPERIODO AS NUMBER) <= CAST(:periodoFinal as NUMBER)
+         ]]>
+    </entry>
+    
+     <entry key="insertar.backup.traza.estado.cuenta">
+        <![CDATA[
+            INSERT INTO TCPG_TRAZA_ESTADO_CTA_HCO (NMCONSECUTIVO, DNI_AFILIADO, NMPERIODO, DSCAMPO_ACTUALIZADO, DSVALOR_NUEVO, DSVALOR_ANTERIOR, DNI_INGRESA, FEINGRESA, NMPOLIZA, CDTIPO_COTIZANTE, CDTIPO_AFILIADO, NMCONSEC_HCO, FEINGRESA_HCO, DNI_INGRESA_HCO) 
+            SELECT NMCONSECUTIVO, DNI_AFILIADO, NMPERIODO, DSCAMPO_ACTUALIZADO, DSVALOR_NUEVO, DSVALOR_ANTERIOR, DNI_INGRESA, FEINGRESA, NMPOLIZA, CDTIPO_COTIZANTE, CDTIPO_AFILIADO, 
+            SEQ_CPG_TRAZA_ESTADO_CTA_HCO.nextval, sysdate, :usuario  
+            FROM TCPG_TRAZA_ESTADO_CUENTA WHERE 
+            NMPOLIZA = :poliza
+            AND DNI_AFILIADO = :afiliado
+            --AND CDTIPO_COTIZANTE = :tipoCotizante
+            AND CAST(NMPERIODO AS NUMBER) >= CAST(:periodoInicial as NUMBER)
+            AND CAST(NMPERIODO AS NUMBER) <= CAST(:periodoFinal as NUMBER)
+         ]]>
+    </entry>
+    
+    <entry key="borrar.backup.estado.cuenta">
+        <![CDATA[
+            DELETE
+            FROM TCPG_ESTADO_CUENTA WHERE 
+            NMPOLIZA = :poliza
+            AND DNI_AFILIADO = :afiliado
+            AND CAST(NMPERIODO AS NUMBER) >= CAST(:periodoInicial as NUMBER)
+            AND CAST(NMPERIODO AS NUMBER) <= CAST(:periodoFinal as NUMBER)
+            AND (
+                (:tipoCotizante='23' AND CDTIPO_AFILIADO=:tipoAfiliado AND CDTIPO_COTIZANTE = :tipoCotizante)
+                OR
+                (:tipoCotizante<>'23' AND  CDTIPO_AFILIADO=:tipoAfiliado AND CDTIPO_COTIZANTE <> '23')
+            )
+         ]]>
+    </entry>
+    
+     <entry key="borrar.backup.estado.cuenta.meta">
+        <![CDATA[
+            DELETE 
+            FROM TCPG_ESTADO_CUENTA_META WHERE 
+            NMPOLIZA = :poliza
+            AND DNI_AFILIADO = :afiliado
+            AND CDTIPO_COTIZANTE = :tipoCotizante
+            AND CAST(NMPERIODO AS NUMBER) >= CAST(:periodoInicial as NUMBER)
+            AND CAST(NMPERIODO AS NUMBER) <= CAST(:periodoFinal as NUMBER)
+         ]]>
+    </entry>
+    
+     <entry key="borrar.backup.traza.estado.cuenta">
+        <![CDATA[
+            DELETE
+            FROM TCPG_TRAZA_ESTADO_CUENTA WHERE 
+            NMPOLIZA = :poliza
+            AND DNI_AFILIADO = :afiliado
+            --AND CDTIPO_COTIZANTE = :tipoCotizante
+            AND CAST(NMPERIODO AS NUMBER) >= CAST(:periodoInicial as NUMBER)
+            AND CAST(NMPERIODO AS NUMBER) <= CAST(:periodoFinal as NUMBER)
+         ]]>
+    </entry>
+    
+    <entry key="buscar.primer.periodo">
+        <![CDATA[
+            SELECT NMPERIODO FROM (
+                SELECT NMPERIODO, MIN(to_date(NMPERIODO,'YYYYMM')) AS PE FROM TCPG_ESTADO_CUENTA WHERE 
+                NMPOLIZA = :poliza 
+                AND DNI_AFILIADO = :afiliado
+                AND CDTIPO_COTIZANTE = :tipoCotizante
+                AND to_date(NMPERIODO,'YYYYMM') > :fechaBase
+                GROUP BY NMPERIODO
+                ORDER BY 2 ASC)
+            WHERE ROWNUM < 2
+         ]]>
+    </entry>
+    
+    
+    <entry key="consulta.integrador.afiliado.centroTrabajo">
+        <![CDATA[
+            WITH AFILIADOS AS (
+                SELECT  
+                    CR.DNI DNI,
+                    CR.CDTIPO_AFILIADO,
+                    CR.CDTIPO_COTIZANTE,
+                    CR.NCERTIFICADO,
+                    CR.CDSUBTIPO_COTIZANTE,
+                    NVL(CR.PTSALARIO, 0) PTSALARIO,
+                    NVL(CR.ptultimo_ibc_cotizado, 0) ptultimo_ibc_cotizado,
+                    CASE WHEN CR.CDTIPO_COTIZANTE||Cr.CDTIPO_AFILIADO IS NULL THEN '3'
+                         WHEN CR.CDTIPO_COTIZANTE IS NULL THEN '2'
+                         WHEN CR.CDTIPO_AFILIADO IS NULL THEN '1'
+                        ELSE '' END ERROR,
+                    CR.FEALTA,
+                    CR.FEBAJA,
+                    CR.NPOLIZA,
+                    SUBSTR(CP.DNI,2) DNI_EMPLEADOR,
+                    SUBSTR(CP.DNI,0,1) TIPODOC_EMPLEADOR
+                FROM
+                    T094_CUERPOLIZA_RIESGO CR
+                    INNER JOIN T094_CUERPOLIZA cp ON cp.NPOLIZA = cr.NPOLIZA
+                    INNER JOIN T094_SUCURSALES SU ON CR.npoliza = SU.npoliza and CR.cdsucursal = SU.cdsucursal 
+                WHERE
+                    CR.NPOLIZA = :poliza
+                    AND SU.cdsucursal = :sucursal
+                    AND SU.cdclase = NVL(:clase, SU.cdclase)
+                    AND SU.cdactividad = NVL(:actividad , SU.cdactividad)    
+                    ORDER BY CR.FEALTA desc
+            ),
+            AFILIADOS_CONDICIONES AS (
+
+                SELECT AF.*,
+                       CC.PTINGRESO_MAX_BASE_LIQ,
+                       CC.PTINGRESO_MIN_BASE_LIQ,
+                       CC.CDTIPO_GENERACION,
+                       CC.CDTIPO_TASA, 
+                       CC.SNINDICADOR_PROPORCIONAL_DIAS,
+                       CC.CDTIPO_NOVEDAD
+                       FROM AFILIADOS AF LEFT JOIN TCPG_CONDICIONES_COTIZA CC
+                       ON  CC.CDTIPO_COTIZANTE = AF.CDTIPO_COTIZANTE
+                           AND CC.CDTIPO_AFILIADO = AF.CDTIPO_AFILIADO 
+            )
+            -- depura los registros filtrando por orden de prioridad
+            SELECT DISTINCT FC.*, 
+               AC.NMRO_COBERTURAS,
+               AC.CSVTIPOS_COTIZANTES
+               FROM AFILIADOS_CONDICIONES FC LEFT JOIN (
+                     SELECT NPOLIZA, 
+                            DNI, 
+                            CDTIPO_AFILIADO,
+                            FEALTA,
+                            FEBAJA,
+                            COUNT(DISTINCT AC.CDTIPO_COTIZANTE) OVER(PARTITION BY NPOLIZA, DNI,  DECODE(AC.CDTIPO_COTIZANTE, '23', '03', AC.CDTIPO_AFILIADO)) NMRO_COBERTURAS,
+                            LISTAGG(AC.CDTIPO_COTIZANTE,',') WITHIN GROUP(ORDER BY CDTIPO_COTIZANTE) OVER (PARTITION BY NPOLIZA, DNI, CDTIPO_AFILIADO) CSVTIPOS_COTIZANTES 
+                            FROM T094_CUERPOLIZA_RIESGO AC
+                            WHERE AC.NPOLIZA = :poliza
+                    ) AC ON  AC.DNI = FC.DNI
+                         AND AC.CDTIPO_AFILIADO = FC.CDTIPO_AFILIADO
+                         AND AC.NPOLIZA = FC.NPOLIZA
+                         AND AC.FEALTA = FC.FEALTA
+                         AND AC.FEBAJA = FC.FEBAJA
+                    ORDER BY FC.DNI, FC.CDTIPO_AFILIADO, FC.FEALTA DESC 
+             ]]>
+    </entry>
+    
+    <entry key="consulta.rangoPeriodos.borrarEstadoCuenta">
+        <![CDATA[
+             SELECT TO_CHAR(FEINICIAL ,'YYYYMM') PERIODO_INICIAL,
+             TO_CHAR(FEFINAL ,'YYYYMM') PERIODO_FINAL
+             FROM (
+                SELECT GREATEST(CR.FEALTA, TO_DATE(:periodoFealta,'YYYYMM')) FEINICIAL,
+                   LEAST(CR.FEBAJA, TO_DATE(:periodoFebaja,'YYYYMM')) FEFINAL
+                   FROM T094_CUERPOLIZA_RIESGO CR
+                   WHERE CR.NPOLIZA = :poliza
+                   AND CR.DNI = :dni
+                   AND CR.CDTIPO_AFILIADO = NVL(:tipoAfiliado, CR.CDTIPO_AFILIADO)
+                   AND CR.CDTIPO_COTIZANTE = NVL(:tipoCotizante, CR.CDTIPO_COTIZANTE)
+                   AND CR.FEALTA<=LAST_DAY(TO_DATE(:periodoFebaja,'YYYYMM'))
+                   AND CR.FEBAJA>=TO_DATE(:periodoFealta,'YYYYMM')
+             )      
+        ]]>
+    </entry>
+    
+    <entry key="consulta.rangoPeriodos.cuerpoPoliza">
+        <![CDATA[
+            WITH rango AS (
+                    SELECT :fechaInicial init, :fechaFinal final from dual
+                    ),
+                 periodo as (
+                    select add_months(trunc(init,'MM'),level-1) mes 
+                    from rango connect by level <= months_between(final, init)+1
+                    )
+            select to_char(p.mes,'YYYYMM') as  periodo
+            FROM T094_CUERPOLIZA_RIESGO CR left join periodo p on p.mes between  trunc(CR.FEALTA, 'MM') and LAST_DAY(CR.FEBAJA)
+            WHERE CR.NPOLIZA = :poliza
+            AND CR.DNI = :afiliado
+            AND CR.CDTIPO_AFILIADO = NVL(:tipoAfiliado, CR.CDTIPO_AFILIADO)
+            AND CR.CDTIPO_COTIZANTE = NVL(:tipoCotizante, CR.CDTIPO_COTIZANTE)
+            group by p.mes order by p.mes asc
+        ]]>
+    </entry>
+
+    <entry key="merge.estadocuenta">
+        <![CDATA[
+            MERGE INTO TCPG_ESTADO_CUENTA EC2 
+                USING(
+                SELECT
+                    :dniAfiliado DNI_AFILIADO,
+                    :tipoCotizante CDTIPO_COTIZANTE,
+                    :tipoAfiliado CDTIPO_AFILIADO,
+                    :periodo NMPERIODO,
+                    :poliza NMPOLIZA
+                    FROM DUAL
+                    ) EC1 
+                ON  (EC1.DNI_AFILIADO = EC2.DNI_AFILIADO 
+                        AND EC1.NMPERIODO = EC2.NMPERIODO 
+                        AND EC1.NMPOLIZA = EC2.NMPOLIZA 
+                        AND EC1.CDTIPO_COTIZANTE = EC2.CDTIPO_COTIZANTE 
+                        AND EC1.CDTIPO_AFILIADO = EC2.CDTIPO_AFILIADO)
+            WHEN MATCHED THEN UPDATE SET
+                    NMDIAS_ESPERADOS = :dias,
+                    POTASA_ESPERADA = :tasa,
+                    PTINGRESO_BASE_LIQ_ESPERADO = :ibc,
+                    PTCOTIZACION_ESPERADA = :cotizacion,
+                    PTSALARIO = :salario,
+                    CDSUCURSAL = :centroTrabajo,
+                    CDSUCURSAL_PAGADORA = :centroTrabajoPagador,
+                    CDTIPO_GENERACION = :tipoGeneracion,
+                    FEMODIFICA = SYSDATE,
+                    DNI_MODIFICA = :dniIngresa,
+                    NMDIAS_REPORTADOS = 0,
+                    PTINGRESO_BASE_LIQ_REPORTADO = 0,
+                    PTSALDO = :cotizacion,
+                    CDESTADO_PAGO = '01',
+                    FELIMITE_PAGO = :fechaLimite
+            WHEN NOT MATCHED THEN INSERT (
+                    NMCONSECUTIVO,
+                    NMPOLIZA,
+                    DNI_AFILIADO,
+                    CDTIPO_COTIZANTE,
+                    CDTIPO_AFILIADO,
+                    NMDIAS_ESPERADOS,
+                    POTASA_ESPERADA,
+                    PTINGRESO_BASE_LIQ_ESPERADO,
+                    PTCOTIZACION_ESPERADA,
+                    PTSALARIO,
+                    CDSUCURSAL,
+                    CDSUCURSAL_PAGADORA,
+                    NMPERIODO,
+                    CDTIPO_GENERACION,
+                    NMPERIODO_GENERACION,
+                    SNEXISTE_PAGO,
+                    FEINGRESA,
+                    DNI_INGRESA,
+                    DSOBSERVACIONES,
+                    NMTOTAL_COBERTURAS,
+                    CDESTADO_PAGO,
+                    PTSALDO,
+                    FELIMITE_PAGO
+                    ) VALUES (
+                                SEQ_CPG_ESTADO_CUENTA.NEXTVAL,
+                                :poliza,
+                                :dniAfiliado,
+                                :tipoCotizante,
+                                :tipoAfiliado,
+                                :dias,
+                                :tasa,
+                                :ibc,
+                                :cotizacion,
+                                :salario,
+                                :centroTrabajo,
+                                :centroTrabajoPagador,
+                                :periodoProceso,
+                                :tipoGeneracion,
+                                :periodoGeneracion,
+                                'N',
+                                SYSDATE,
+                                :dniIngresa,
+                                :observaciones,
+                                :numeroCoberturas,
+                                :estadoPago,
+                                :saldo,
+                                :fechaLimite
+                   )
+        ]]>
+    </entry>
+    <entry key="consulta.integrador.afiliados.nmformulario">
+        <![CDATA[
+               WITH AFILIADOS AS (
+                SELECT --DISTINCT 
+                    CR.DNI DNI,
+                    CR.CDTIPO_AFILIADO,
+                    CR.CDTIPO_COTIZANTE,
+                    CR.NCERTIFICADO,
+                    CR.CDSUBTIPO_COTIZANTE,
+                    NVL(CR.PTSALARIO, 0) PTSALARIO,
+                    NVL(CR.ptultimo_ibc_cotizado, 0) ptultimo_ibc_cotizado,
+                    CASE WHEN CR.CDTIPO_COTIZANTE||Cr.CDTIPO_AFILIADO IS NULL THEN '3'
+                         WHEN CR.CDTIPO_COTIZANTE IS NULL THEN '2'
+                         WHEN CR.CDTIPO_AFILIADO IS NULL THEN '1'
+                        ELSE '' END ERROR,
+                    CR.FEALTA,
+                    CR.FEBAJA,
+                    CR.NPOLIZA,
+                    SUBSTR(CP.DNI,2) DNI_EMPLEADOR,
+                    SUBSTR(CP.DNI,0,1) TIPODOC_EMPLEADOR
+                FROM
+                    T094_CUERPOLIZA_RIESGO CR
+                    INNER JOIN T094_CUERPOLIZA cp ON cp.NPOLIZA = cr.NPOLIZA
+                WHERE
+                    CR.DNI = :dni
+                    ORDER BY CR.FEALTA desc
+            ),
+            AFILIADOS_CONDICIONES AS (
+
+                SELECT AF.*,
+                       CC.PTINGRESO_MAX_BASE_LIQ,
+                       CC.PTINGRESO_MIN_BASE_LIQ,
+                       CC.CDTIPO_GENERACION,
+                       CC.CDTIPO_TASA, 
+                       CC.SNINDICADOR_PROPORCIONAL_DIAS,
+                       CC.CDTIPO_NOVEDAD
+                       FROM AFILIADOS AF LEFT JOIN TCPG_CONDICIONES_COTIZA CC
+                       ON  CC.CDTIPO_COTIZANTE = AF.CDTIPO_COTIZANTE
+                           AND CC.CDTIPO_AFILIADO = AF.CDTIPO_AFILIADO 
+            ),
+            AFILIADOS_NOVEDADES AS (
+                    SELECT  SUBSTR(N.NMPERIODO,3,4)||SUBSTR(N.NMPERIODO,1,2) XPERIODO,
+                            N.NMFORMULARIO_PAGO,
+                            AC.*
+                    FROM  T094_NOVEDADES N INNER JOIN AFILIADOS_CONDICIONES AC ON N.NPOLIZA = AC.NPOLIZA AND  N.DNI_EMPLEADO = SUBSTR(AC.DNI,2) AND  N.TIPO_DOCUMENTO_EMPLEADO = SUBSTR(AC.DNI,1,1) 
+            )
+            -- depura los registros filtrando por orden de prioridad
+            SELECT DISTINCT AN.*, 
+                   AC.NMRO_COBERTURAS,
+                   AC.CSVTIPOS_COTIZANTES
+                 FROM AFILIADOS_NOVEDADES AN LEFT JOIN (
+                     SELECT NPOLIZA, 
+                            DNI, 
+                            CDTIPO_AFILIADO,
+                            FEALTA,
+                            FEBAJA,
+                            COUNT(DISTINCT AC.CDTIPO_COTIZANTE) OVER(PARTITION BY NPOLIZA, DNI,  DECODE(AC.CDTIPO_COTIZANTE, '23', '03', AC.CDTIPO_AFILIADO)) NMRO_COBERTURAS,
+                            LISTAGG(AC.CDTIPO_COTIZANTE,',') WITHIN GROUP(ORDER BY CDTIPO_COTIZANTE) OVER (PARTITION BY NPOLIZA, DNI, CDTIPO_AFILIADO) CSVTIPOS_COTIZANTES 
+                            FROM T094_CUERPOLIZA_RIESGO AC
+                            WHERE AC.DNI = :dni
+                    ) AC ON  AC.DNI = AN.DNI
+                         AND AC.CDTIPO_AFILIADO = AN.CDTIPO_AFILIADO
+                         AND AC.NPOLIZA = AN.NPOLIZA
+                         AND AC.FEALTA = AN.FEALTA
+                         AND AC.FEBAJA = AN.FEBAJA
+                    ORDER BY AN.DNI, AN.CDTIPO_AFILIADO, AN.FEALTA DESC 
+        ]]>
+    </entry>
+    
+    <entry key="registro.detalles.est.cta">
+        <![CDATA[    
+       INSERT 
+       INTO TCPG_ESTADO_CUENTA_DTLLE(
+                NMPOLIZA,
+                DNI_AFILIADO,
+                NMPERIODO,
+                NMFORMULARIO_PAGO,
+                NMDIAS_AUS,
+                PTCOTIZACION_AUS,
+                POTASA_AUS,
+                PTINGRESO_BASE_LIQ_AUS,
+                NMDIAS_LAB,
+                PTCOTIZACION_LAB,
+                POTASA_LAB,
+                PTINGRESO_BASE_LIQ_LAB,
+                CDTIPO_COTIZANTE,
+                CDTIPO_PLANILLA,
+                NMPLANILLA,
+                FEPAGO,
+                SNINGRESO,
+                SNRETIRO,
+                DNI_RESPONSABLE,
+                CDSUBTIPO_COTIZANTE_REPORTADO,
+                DNI_INGRESA,
+                FEINGRESA,
+                NMCONSECUTIVO,
+                NMCONSECUTIVO_EC,
+                CDNOVEDAD
+            )
+        SELECT :poliza,
+            :dniAfiliado,
+            :periodo,
+            :numeroformulario,
+            :diasAusentismo,
+            :cotizacionAusentismo,
+            :tasaAusentismo,
+            :ibcAusentismo,
+            :diasLaborados,
+            :cotizacionLaborado,
+            :tasaLaborado,
+            :ibcLaborado,
+            :tipoCotizante,
+            :tipoPlanilla,
+            :planilla,
+            :fepago,
+            :ingreso,
+            :retiro,
+            :responsable,
+            :subtipoCotizante,
+            :dniIngresa,
+            SYSDATE,
+            TCPG_ESTADO_CTA_DTLL_SEQ.NEXTVAL,
+            :consecutivoEstCta,
+            :idNovedad
+        FROM DUAL
+            WHERE NOT EXISTS (
+                SELECT 1 FROM TCPG_ESTADO_CUENTA_DTLLE WHERE 
+                    CDNOVEDAD = :idNovedad AND NMPOLIZA = :poliza
+            )
+    ]]>
+    </entry>
+    
+    <entry key="borrar.renes.formulario.sincobertura">
+        <![CDATA[    
+            DELETE
+            FROM TCPG_RENES R
+            WHERE 
+                    R.NPOLIZA = :poliza
+                    AND R.DNI_EMPLEADO = NVL(:dniAfiliado,R.DNI_EMPLEADO)
+                    AND R.NMPERIODO = :periodo
+                    AND R.NMFORMULARIO_PAGO = :formulario
+        ]]>
+    </entry>
+    
+    <entry key="borrar.renes">
+        <![CDATA[    
+            DELETE
+            FROM TCPG_RENES R
+            WHERE 
+                    R.NPOLIZA = :poliza
+                    AND R.DNI_EMPLEADO = :dniEmpleado
+                    AND R.NMPERIODO = :periodo
+                    AND R.CDTIPO_COTIZANTE IN (SELECT CDTIPO_COTIZANTE FROM TCPG_CONDICIONES_COTIZA where CDTIPO_AFILIADO = :tipoAfiliado)
+                    AND R.NMFORMULARIO_PAGO IN (
+                            SELECT
+                            N.NMFORMULARIO_PAGO 
+                            FROM T094_NOVEDADES N
+                                    INNER JOIN T094_CONTROL_AUTOLIQUIDACIONES CA ON N.NMFORMULARIO_PAGO = CA.NMFORMULARIO_PAGO
+                                    INNER JOIN TCPG_CONDICIONES_COTIZA CC ON CC.CDTIPO_COTIZANTE = N.CDTIPO_AFILIADO
+                            WHERE N.DNI_EMPLEADO = SUBSTR(R.DNI_EMPLEADO, 2)
+                                    AND N.TIPO_DOCUMENTO_EMPLEADO = SUBSTR(R.DNI_EMPLEADO, 1,1)
+                                    AND N.NMPERIODO = CONCAT(SUBSTR(R.NMPERIODO, 5, 6), SUBSTR(R.NMPERIODO, 1, 4))
+                                    AND CC.CDTIPO_AFILIADO = R.CDTIPO_AFILIADO
+                                    AND (CC.CDTIPO_COTIZANTE <> '23' OR( CC.CDTIPO_COTIZANTE = '23' AND CA.CDTIPO_PLANILLA IN ('K','N','U','M','A')  ))
+                            GROUP BY N.NMFORMULARIO_PAGO
+                    )
+                    AND EXISTS (
+                            SELECT 1
+                            FROM TCPG_ESTADO_CUENTA E
+                            WHERE E.NMPOLIZA = R.NPOLIZA
+                                    AND E.NMPERIODO = R.NMPERIODO
+                                    AND E.DNI_AFILIADO = R.DNI_EMPLEADO
+                                    AND E.CDTIPO_AFILIADO = R.CDTIPO_AFILIADO
+                    )
+                    AND EXISTS (SELECT  1  FROM T094_CUERPOLIZA_RIESGO CR 
+                        WHERE CR.NPOLIZA = R.NPOLIZA AND CR.DNI = R.DNI_EMPLEADO
+                                AND ( TO_DATE(R.NMPERIODO,'YYYYMM') between TRUNC(CR.FEALTA,'MONTH')  AND TRUNC(CR.FEBAJA,'MONTH')))
+        ]]>
+    </entry>
+    
+    <entry key="borrar.renes.formulario">
+        <![CDATA[    
+            DELETE
+            FROM TCPG_RENES R
+            WHERE 
+                    R.NPOLIZA = :poliza
+                    AND R.DNI_EMPLEADO = :dniEmpleado
+                    AND R.NMPERIODO = :periodo
+                    AND R.CDTIPO_COTIZANTE IN (SELECT CDTIPO_COTIZANTE FROM TCPG_CONDICIONES_COTIZA where CDTIPO_AFILIADO = :tipoAfiliado)
+                    AND R.NMFORMULARIO_PAGO = :formulario
+                    AND EXISTS (
+                            SELECT 1
+                            FROM TCPG_ESTADO_CUENTA E
+                            WHERE E.NMPOLIZA = R.NPOLIZA
+                                    AND E.NMPERIODO = R.NMPERIODO
+                                    AND E.DNI_AFILIADO = R.DNI_EMPLEADO
+                                    AND E.CDTIPO_COTIZANTE = R.CDTIPO_COTIZANTE
+                    )
+        ]]>
+    </entry>
+    
+    <entry key="actualizar.enriques">
+        <![CDATA[
+            UPDATE TCPG_ESTADO_CUENTA E SET SNEXISTE_PAGO = 'S', 
+                    FEMODIFICA = SYSDATE,
+                    DNI_MODIFICA = :dniModifica
+               WHERE DNI_AFILIADO = :dniAfiliado
+                 AND CDTIPO_COTIZANTE = :tipoCotizante
+                 AND CDTIPO_AFILIADO = :tipoAfiliado
+                 AND NMPOLIZA = :poliza
+                 AND NMPERIODO = :periodo
+                 AND EXISTS (SELECT 1 FROM T094_NOVEDADES N
+                    INNER JOIN T094_CONTROL_AUTOLIQUIDACIONES CA ON N.NMFORMULARIO_PAGO = CA.NMFORMULARIO_PAGO
+                    INNER JOIN TCPG_CONDICIONES_COTIZA CC ON CC.CDTIPO_COTIZANTE = N.CDTIPO_AFILIADO
+                    WHERE N.DNI_EMPLEADO = SUBSTR(E.DNI_AFILIADO, 2)
+                    AND N.TIPO_DOCUMENTO_EMPLEADO = SUBSTR(R.DNI_EMPLEADO, 1,1)
+                    AND N.NMPERIODO = CONCAT(SUBSTR(E.NMPERIODO, 5, 6), SUBSTR(E.NMPERIODO, 1, 4))
+                    AND CC.CDTIPO_AFILIADO = E.CDTIPO_AFILIADO)
+         ]]>
+    </entry>
+    
+    <entry key="consulta.renes.formulario">
+        <![CDATA[    
+            SELECT 1 RENE
+            FROM TCPG_RENES R
+            WHERE 
+                    R.NPOLIZA = :poliza
+                    AND R.DNI_EMPLEADO = :dniEmpleado
+                    AND R.NMPERIODO = CONCAT(SUBSTR(:periodo , 3, 6), SUBSTR(:periodo, 1, 2))
+                    AND R.CDTIPO_COTIZANTE IN (SELECT CDTIPO_COTIZANTE FROM TCPG_CONDICIONES_COTIZA where CDTIPO_AFILIADO = :tipoAfiliado)
+                    AND R.NMFORMULARIO_PAGO = :formulario
+        ]]>
+    </entry>
+    
+    
+    <entry key="existe.estadocuenta">
+        <![CDATA[    
+            SELECT 1 CTA
+                FROM TCPG_ESTADO_CUENTA E
+                WHERE E.NMPOLIZA = :poliza
+                AND E.NMPERIODO = CONCAT(SUBSTR(:periodo , 3, 6), SUBSTR(:periodo, 1, 2))
+                AND E.DNI_AFILIADO = :dniEmpleado
+                AND E.CDTIPO_COTIZANTE IN (SELECT CDTIPO_COTIZANTE FROM TCPG_CONDICIONES_COTIZA where CDTIPO_AFILIADO = :tipoAfiliado)
+        ]]>
+    </entry>
+    
+    <entry key="existen.pagos">
+        <![CDATA[  
+            SELECT 1 PAGOS from TCPG_ESTADO_CUENTA E 
+                WHERE DNI_AFILIADO = :dniAfiliado
+                 AND CDTIPO_AFILIADO = :tipoAfiliado
+                 AND NMPOLIZA = :poliza
+                 AND NMPERIODO = CONCAT(SUBSTR(:periodo , 3, 6), SUBSTR(:periodo, 1, 2))
+                 AND EXISTS (SELECT 1 FROM T094_NOVEDADES N
+                    INNER JOIN T094_CONTROL_AUTOLIQUIDACIONES CA ON N.NMFORMULARIO_PAGO = CA.NMFORMULARIO_PAGO
+                    INNER JOIN TCPG_CONDICIONES_COTIZA CC ON CC.CDTIPO_COTIZANTE = N.CDTIPO_AFILIADO
+                    WHERE N.DNI_EMPLEADO = SUBSTR(E.DNI_AFILIADO, 2)
+                    AND  N.TIPO_DOCUMENTO_EMPLEADO = SUBSTR(E.DNI_AFILIADO, 1,1)                                                                                                
+                    AND N.NMPERIODO = CONCAT(SUBSTR(E.NMPERIODO, 5, 6), SUBSTR(E.NMPERIODO, 1, 4))
+                    AND CC.CDTIPO_AFILIADO = E.CDTIPO_AFILIADO)
+        ]]>
+    </entry>
+    
+    <entry key="actualizacion.consolidado.dependientes">
+        <![CDATA[
+        UPDATE  TCPG_CONTROL_ESTADOCUENTA 
+            SET (PTDEUDA,PTSALDO_A_FAVOR,PTVALOR_ESPERADO,NMTOTAL_TRABAJADORES,DNI_MODIFICA,FEMODIFICA) 
+             = (
+                SELECT X.*,:dni DNI_MODIFICA, SYSDATE FEMODIFICA FROM (SELECT DISTINCT
+                    SUM(CASE WHEN PTSALDO > 0 THEN PTSALDO ELSE 0 END) OVER (PARTITION BY 1),
+                    SUM(CASE WHEN PTSALDO < 0 THEN PTSALDO ELSE 0 END) OVER (PARTITION BY 1),
+                    SUM(PTCOTIZACION_REPORTADA) OVER (PARTITION BY 1),
+                    COUNT(NMDIAS_REPORTADOS) OVER (PARTITION BY 1)
+                FROM TCPG_ESTADO_CUENTA
+                WHERE NMPOLIZA = :poliza AND NMPERIODO = :periodo
+                    AND CDTIPO_AFILIADO = '01' AND CDTIPO_COTIZANTE <> '23') X )
+        WHERE NMPOLIZA = :poliza AND NMPERIODO = :periodo  AND CDTIPO_AFILIADO = '01'
+        ]]>
+    </entry>
+    
+    <entry key="actualizacion.consolidado.independientes">
+        <![CDATA[
+             UPDATE  TCPG_CONTROL_ESTADOCUENTA 
+                SET (PTDEUDA,PTSALDO_A_FAVOR,PTVALOR_ESPERADO,NMTOTAL_TRABAJADORES,DNI_MODIFICA,FEMODIFICA) 
+                 = (
+                    SELECT X.*,:dni DNI_MODIFICA, SYSDATE FEMODIFICA FROM (SELECT DISTINCT
+                        SUM(CASE WHEN PTSALDO > 0 THEN PTSALDO ELSE 0 END) OVER (PARTITION BY 1),
+                        SUM(CASE WHEN PTSALDO < 0 THEN PTSALDO ELSE 0 END) OVER (PARTITION BY 1),
+                        SUM(PTCOTIZACION_REPORTADA) OVER (PARTITION BY 1),
+                        COUNT(NMDIAS_REPORTADOS) OVER (PARTITION BY 1)
+                    FROM TCPG_ESTADO_CUENTA
+                    WHERE NMPOLIZA = :poliza AND NMPERIODO = :periodo
+                        AND CDTIPO_AFILIADO = '02' ) X )
+            WHERE NMPOLIZA = :poliza AND NMPERIODO = :periodo  AND CDTIPO_AFILIADO = '02' 
+        ]]>
+    </entry>
+    
+    <entry key="actualizacion.consolidado.estudiantes">
+        <![CDATA[
+        UPDATE  TCPG_CONTROL_ESTADOCUENTA 
+            SET (PTDEUDA,PTSALDO_A_FAVOR,PTVALOR_ESPERADO,NMTOTAL_TRABAJADORES,DNI_MODIFICA,FEMODIFICA) 
+             = (
+                SELECT X.*,:dni DNI_MODIFICA, SYSDATE FEMODIFICA FROM (SELECT DISTINCT
+                    SUM(CASE WHEN PTSALDO > 0 THEN PTSALDO ELSE 0 END) OVER (PARTITION BY 1),
+                    SUM(CASE WHEN PTSALDO < 0 THEN PTSALDO ELSE 0 END) OVER (PARTITION BY 1),
+                    SUM(PTCOTIZACION_REPORTADA) OVER (PARTITION BY 1),
+                    COUNT(NMDIAS_REPORTADOS) OVER (PARTITION BY 1)
+                FROM TCPG_ESTADO_CUENTA
+                WHERE NMPOLIZA = :poliza AND NMPERIODO = :periodo
+                    AND CDTIPO_AFILIADO = '01' AND CDTIPO_COTIZANTE = '23') X )
+        WHERE NMPOLIZA = :poliza AND NMPERIODO = :periodo  AND CDTIPO_AFILIADO = '03'
+        ]]>
+    </entry>
+    
+    <entry key="actualizacion.renes.consolidado.dependientes">
+        <![CDATA[
+        UPDATE  TCPG_CONTROL_ESTADOCUENTA 
+            SET (PTTOTAL_RENES) 
+             = (SELECT SUM(PTCOTIZACION) FROM TCPG_RENES WHERE NPOLIZA = :poliza
+                        AND NMPERIODO = :periodo
+                        AND CDTIPO_AFILIADO = '01' AND CDTIPO_COTIZANTE <> '23')
+        WHERE NMPOLIZA = :poliza AND NMPERIODO = :periodo  AND CDTIPO_AFILIADO = '01'
+        ]]>
+    </entry>
+    
+    <entry key="actualizacion.renes.consolidado.estudiantes">
+        <![CDATA[
+        UPDATE  TCPG_CONTROL_ESTADOCUENTA 
+            SET (PTTOTAL_RENES) 
+             = (SELECT SUM(PTCOTIZACION) FROM TCPG_RENES WHERE NPOLIZA = :poliza
+                        AND NMPERIODO = :periodo
+                        AND CDTIPO_AFILIADO = '01' AND CDTIPO_COTIZANTE = '23')
+        WHERE NMPOLIZA = :poliza AND NMPERIODO = :periodo  AND CDTIPO_AFILIADO = '03'
+        ]]>
+    </entry>
+    
+    <entry key="actualizacion.renes.consolidado.independientes">
+        <![CDATA[
+        UPDATE  TCPG_CONTROL_ESTADOCUENTA 
+            SET (PTTOTAL_RENES) 
+             = (SELECT SUM(PTCOTIZACION) FROM TCPG_RENES WHERE NPOLIZA = :poliza
+                        AND NMPERIODO = :periodo
+                        AND CDTIPO_AFILIADO = '02')
+        WHERE NMPOLIZA = :poliza AND NMPERIODO = :periodo  AND CDTIPO_AFILIADO = '02'
+        ]]>
+    </entry>
+  
+    <entry key="reproceso.marcar.cambios.estado.cuenta">
+        <![CDATA[  
+        UPDATE
+            TCPG_INTEGRA_ESTADO_CTA
+        SET
+            CDESTADO = :estado,
+            FEMODIFICA = SYSDATE,
+            DNI_MODIFICA = :dniModifica
+        WHERE
+            NMCONSECUTIVO = :consecutivo
+        ]]>
+    </entry>
+    
+    <entry key="control.integrador.insert">
+        <![CDATA[  
+        INSERT INTO
+            TCPG_CONTROL_INTEGRADOR
+            (        
+                NMCONSECUTIVO, NMPERIODO, NMPOLIZA, DSMOTIVO_CAMBIO_ESTADO_CUENTA, FEINGRESA, DNI_INGRESA
+            )
+            VALUES    (        
+                SEQ_CPG_CONTROL_INTEGRADOR.NEXTVAL, :periodo, :contrato, :cambio, sysdate, :dniIngreso    
+            )
+        ]]>
+    </entry>  
+    
+    <entry key="cambios.estado.cuenta.cdfuente">
+        <![CDATA[  
+            select CDFUENTE from  TCPG_INTEGRA_ESTADO_CTA  where NMCONSECUTIVO = :consecutivo
+        ]]>
+    </entry>
+    
+    <entry key="consulta.consolidado.fechaLimite">
+    <![CDATA[    
+        SELECT NMPOLIZA, PTSALDO_A_FAVOR, PTDEUDA, PTOTROS_CONCEPTOS, PTTOTAL_RENES, PTVALOR_ANULADO, PTVALOR_ESPERADO, PTVALOR_ESPERADOS_INICIAL, NMPERIODO 
+        FROM TCPG_CONTROL_ESTADOCUENTA 
+        WHERE FELIMITE_PAGO = TRUNC(:fechaLimitePago)
+    ]]>
+    </entry>
+    
+    <entry key="crear.hco.movimiento.control.estadocuenta">
+    <![CDATA[    
+        INSERT INTO
+        TCPG_CTRL_EST_CT_MVTO_HCO(
+            NMPERIODO_GENERACION,
+            NMPOLIZA,
+            FEINGRESA,
+            DNI_INGRESA,
+            FELIMITE_PAGO,
+            CDFUENTE,
+            NMPERIODO,
+            CDTIPO_AFILIADO,
+            NMEXPUESTOS_INICIAL,
+            PTVALOR_ESPERADOS_INICIAL,
+            NMTOTAL_AFILIADOS_INICIAL,
+            NMTOTAL_TRABAJADORES_INICIAL,
+            PTVALOR_ESPERADO,
+            NMTOTAL_TRABAJADORES,
+            PTSALDO_INICIAL,
+            PTDEUDA,
+            PTSALDO_A_FAVOR,
+            PTOTROS_CONCEPTOS,
+            PTVALOR_ANULADO,
+            SNCONCILIADO,
+            SNMOVIDO,
+            CDESTADO_PAGO,
+            PTTOTAL_RENES
+        ) SELECT
+            NMPERIODO_GENERACION,
+            NMPOLIZA,
+            FEINGRESA,
+            DNI_INGRESA,
+            FELIMITE_PAGO,
+            CDFUENTE,
+            NMPERIODO,
+            CDTIPO_AFILIADO,
+            NMEXPUESTOS_INICIAL,
+            PTVALOR_ESPERADOS_INICIAL,
+            NMTOTAL_AFILIADOS_INICIAL,
+            NMTOTAL_TRABAJADORES_INICIAL,
+            PTVALOR_ESPERADO,
+            NMTOTAL_TRABAJADORES,
+            PTSALDO_INICIAL,
+            PTDEUDA,
+            PTSALDO_A_FAVOR,
+            PTOTROS_CONCEPTOS,
+            PTVALOR_ANULADO,
+            SNCONCILIADO,
+            SNMOVIDO,
+            CDESTADO_PAGO,
+            PTTOTAL_RENES
+        FROM
+            TCPG_CONTROL_ESTADOCUENTA
+        WHERE
+            NMPOLIZA =:npoliza
+            AND NMPERIODO =:periodo
+    ]]>
+    </entry>
+    
+    <entry key="crear.hco.movimiento.estadocuenta">
+    <![CDATA[    
+        INSERT INTO
+        TCPG_EST_CUENTA_HCO_MVTO(
+            NMPOLIZA,
+            DNI_AFILIADO,
+            CDTIPO_COTIZANTE,
+            CDTIPO_AFILIADO,
+            NMDIAS_ESPERADOS,
+            PTCOTIZACION_ESPERADA,
+            PTINGRESO_BASE_LIQ_ESPERADO,
+            PTSALARIO,
+            CDSUCURSAL,
+            CDSUCURSAL_PAGADORA,
+            POTASA_ESPERADA,
+            FEINGRESA,
+            DNI_INGRESA,
+            NMPERIODO,
+            SNEXISTE_PAGO,
+            NMCONSECUTIVO,
+            CDTIPO_GENERACION,
+            NMPERIODO_GENERACION,
+            NMDIAS_REPORTADOS,
+            PTCOTIZACION_REPORTADA,
+            POTASA_REPORTADA,
+            PTINGRESO_BASE_LIQ_REPORTADO,
+            DSOBSERVACIONES,
+            CDSUBTIPO_COTIZANTE,
+            CDTIPO_COTIZANTE_REPORTADO,
+            CDSUBTIPO_COTIZANTE_REPORTADO,
+            NMTOTAL_COBERTURAS,
+            CDESTADO_PAGO,
+            PTSALDO,
+            FELIMITE_PAGO
+        ) SELECT
+            NMPOLIZA,
+            DNI_AFILIADO,
+            CDTIPO_COTIZANTE,
+            CDTIPO_AFILIADO,
+            NMDIAS_ESPERADOS,
+            PTCOTIZACION_ESPERADA,
+            PTINGRESO_BASE_LIQ_ESPERADO,
+            PTSALARIO,
+            CDSUCURSAL,
+            CDSUCURSAL_PAGADORA,
+            POTASA_ESPERADA,
+            FEINGRESA,
+            DNI_INGRESA,
+            NMPERIODO,
+            SNEXISTE_PAGO,
+            NMCONSECUTIVO,
+            CDTIPO_GENERACION,
+            NMPERIODO_GENERACION,
+            NMDIAS_REPORTADOS,
+            PTCOTIZACION_REPORTADA,
+            POTASA_REPORTADA,
+            PTINGRESO_BASE_LIQ_REPORTADO,
+            DSOBSERVACIONES,
+            CDSUBTIPO_COTIZANTE,
+            CDTIPO_COTIZANTE_REPORTADO,
+            CDSUBTIPO_COTIZANTE_REPORTADO,
+            NMTOTAL_COBERTURAS,
+            CDESTADO_PAGO,
+            PTSALDO,
+            FELIMITE_PAGO
+        FROM
+            TCPG_ESTADO_CUENTA
+        WHERE
+            NMPOLIZA =:npoliza
+            AND NMPERIODO =:periodo
+    ]]>
+    </entry> 
+    
+    <entry key="obtener.parametros">
+    <![CDATA[    
+        SELECT CDPARAMETRO,DSVALOR FROM TCPG_PARAMETROS 
+            WHERE FEBAJA > SYSDATE OR FEBAJA IS NULL 
+    ]]>
+    </entry>
+    
+    <entry key="obtener.valor.parametro">
+    <![CDATA[    
+        SELECT DSVALOR FROM TCPG_PARAMETROS WHERE CDPARAMETRO = :parametro
+    ]]>
+    </entry> 
+    
+    <entry key="consulta.consolidados">
+    <![CDATA[    
+        SELECT
+            PTDEUDA,
+            PTSALDO_A_FAVOR,
+            PTVALOR_ESPERADO,
+            NMTOTAL_TRABAJADORES,
+            FELIMITE_PAGO,
+            CDTIPO_AFILIADO,
+            PTOTROS_CONCEPTOS,
+            PTTOTAL_RENES,
+            PTVALOR_ANULADO,
+            PTVALOR_ESPERADOS_INICIAL
+        FROM
+            TCPG_CONTROL_ESTADOCUENTA
+        WHERE
+            NMPOLIZA =:poliza
+            AND NMPERIODO =:periodo
+    ]]>
+    </entry> 
+    
+    <entry key="consulta.total.pagado.legalizaciones">
+    <![CDATA[ 
+         SELECT
+                NVL(SUM( PTCOTIZACION_A_PAGAR ),0)
+            FROM
+                T094_AUTOLIQUIDACIONES 
+            WHERE
+                npoliza = :poliza
+                AND nmperiodo = :periodo
+     ]]>
+    </entry> 
+    
+    <entry key="actualizar.estado.consolidados">
+    <![CDATA[ 
+        UPDATE
+            TCPG_CONTROL_ESTADOCUENTA
+        SET
+            FEMODIFICA = SYSDATE,
+            DNI_MODIFICA =:dni,
+            CDESTADO_PAGO =:estado
+        WHERE
+            nmpoliza =:poliza
+            AND nmperiodo =:periodo
+     ]]>
+    </entry> 
+    
+    <entry key="actualizar.nopagos.enriques">
+    <![CDATA[ 
+          UPDATE 
+            TCPG_ESTADO_CUENTA 
+          SET 
+            CDESTADO_PAGO = '03',
+            FEMODIFICA = SYSDATE,
+            DNI_MODIFICA = :dniModifica
+          WHERE 
+            NMPOLIZA = :npoliza
+            AND NMPERIODO = :periodo 
+            AND SNEXISTE_PAGO = 'N' 
+            AND CDESTADO_PAGO = '01'
+     ]]>
+    </entry> 
+    
+    <entry key="insertar.reproceso.pendiente">
+    <![CDATA[
+         INSERT
+            /*+ IGNORE_ROW_ON_DUPKEY_INDEX(TCPG_REPROCESO_PENDIENTE,TCPG_REPROCESO_PENDIENTE_PK) */
+            INTO
+                TCPG_REPROCESO_PENDIENTE
+                (NMPOLIZA,NMPERIODO,NMFORMULARIO_PAGO,FEINGRESA,SNPROCESADO)
+            VALUES(
+                :poliza,
+                :periodo,
+                :formulario,
+                SYSDATE,
+                'N'
+              )
+    ]]>
+    </entry>
+    
+    <entry key="consulta.afiliadosXformularioXperiodo">
+    <![CDATA[
+        SELECT DISTINCT
+            N.NMPERIODO PERIODO,
+            N.TIPO_DOCUMENTO_EMPLEADO||N.DNI_EMPLEADO DNI,
+            N.CDTIPO_AFILIADO tipoCotizante,
+            N.CDSUBTIPO_COTIZANTE subtipoCotizante,
+            CN.NPOLIZA,
+            N.TIPO_DOCUMENTO_EMPLEADOR tipoDocEmpleador,
+            N.DNI_EMPLEADOR dniEmpleador,
+            CC.PTINGRESO_MAX_BASE_LIQ,
+            CC.PTINGRESO_MIN_BASE_LIQ,
+            CC.CDTIPO_GENERACION,
+            CC.CDTIPO_TASA,
+            CC.SNINDICADOR_PROPORCIONAL_DIAS,
+            CC.CDTIPO_NOVEDAD,
+            CC.CDTIPO_AFILIADO,
+            CA.CDTIPO_PLANILLA,
+            CA.CDTIPO_PROCESO,
+            N.CDNUEVA_SUCURSAL CT,
+            N.FEINICIO_VCT fechaInicioVCT, 
+            N.FEFIN_VCT fechaFinVCT,
+            DECODE(N.SNVCT,'S','X',N.SNVCT) SNVCT
+         FROM T094_CONTROL_NOVEDADES CN
+            INNER JOIN T094_CONTROL_AUTOLIQUIDACIONES CA ON CA.NMFORMULARIO_PAGO = CN.NMFORMULARIO_PAGO
+            INNER JOIN T094_NOVEDADES N ON CN.NMFORMULARIO_PAGO = N.NMFORMULARIO_PAGO
+            LEFT JOIN TCPG_CONDICIONES_COTIZA CC ON CC.CDTIPO_COTIZANTE = N.CDTIPO_AFILIADO
+         WHERE 
+            N.NMFORMULARIO_PAGO = :numeroFormulario
+            AND N.DNI_EMPLEADO = :afiliado
+            AND N.NMPERIODO = :periodo
+            
+    ]]>
+   </entry>
+   
+   <entry key="insertar.historicoCT">
+    <![CDATA[
+        INSERT INTO T094_HIST_CAMBIO_CT_COBERTURA
+                ( NPOLIZA,
+                  DNI_AFILIADO,
+                  CDSUCURSAL_ANTERIOR,
+                  CDSUCURSAL_NUEVA,
+                  DSPERIODOS_CAMBIO,
+                  DNI_INGRESA,
+                  FEINGRESA,
+                  CDFUENTE,
+                  NMCONSECUTIVO)
+        VALUES (:poliza,
+                  :dni,
+                  :sucursalAnterior,
+                  :sucursalNueva,
+                  :periodosCambio,
+                  :dniIngresa,
+                  SYSDATE,
+                  :fuente,
+                  SEQAFI_HISTCAMBIOCT.NEXTVAL)
+    ]]>
+   </entry>
+   
+   <entry key="actualizar.cuerpolizaRiesgo.cambioCT">
+    <![CDATA[
+        UPDATE T094_CUERPOLIZA_RIESGO
+            SET    CDSUCURSAL = :sucursal
+            WHERE FEBAJA = :febaja
+                     AND    DNI = :dni
+                     AND    NPOLIZA = :poliza
+                     AND  NCERTIFICADO = :certificado
+    ]]>
+   </entry>
+   
+   <entry key="actualizar.errorRene.novedad.afiliado">
+    <![CDATA[
+        UPDATE
+            t094_novedades N
+        SET
+            CDERROR = SUBSTR( N.CDERROR, 0, 5 )||:esRene || SUBSTR( N.CDERROR, 7 )
+        WHERE
+            --NMPERIODO =:periodo
+            DNI_EMPLEADO =:numeroDocumento
+            AND TIPO_DOCUMENTO_EMPLEADO = :tipoDocumento
+            --AND NPOLIZA =:poliza
+            AND NMFORMULARIO_PAGO = :formulario
+    ]]>
+   </entry>
+   
+   <entry key="insertar.historicoInconsistenciaCT">
+    <![CDATA[
+        INSERT INTO T094_HIST_INCONSIST_CAMBIO_CT
+            (NPOLIZA, 
+            DNI_AFILIADO, 
+            FEINGRESA, 
+            NMPERIODO, 
+            CDSUCURSAL_ANTERIOR, 
+            CDSUCURSAL_NUEVA, 
+            CDINCONSISTENCIA, 
+            DNI_INGRESA, 
+            SNCAMBIO)
+       VALUES(
+           :poliza, 
+           :dni, 
+           SYSDATE, 
+           :periodo, 
+           :sucursalAnterior, 
+           :sucursalNueva,
+           :codigo,
+           :dniIngresa, 
+           :snCambio)
+    ]]>
+   </entry>
+   
+   <entry key="consulta.buscarCTP">
+    <![CDATA[
+        SELECT * FROM ( 
+            SELECT 
+                CDSUCURSAL_PAGADORA 
+            FROM T094_HISTORICO_SUCURSALES_DEPE
+            WHERE
+                    CDSUCURSAL =:sucursal
+                    AND NPOLIZA =:poliza
+                    AND FEALTA <= LAST_DAY( TO_DATE(:periodo, 'YYYYMM' ))
+                    AND FEBAJA >= TO_DATE(:periodo, 'YYYYMM' )
+                ORDER BY
+                    FEINGRESO DESC
+        ) WHERE ROWNUM = 1
+    ]]>
+   </entry>
+   
+   <entry key="registrar.logReproceso.ejecucion">
+    <![CDATA[
+        INSERT INTO tcpg_log_ejec_reproceso (
+            nmconsecutivo,
+            nmpoliza,
+            nmperiodo,
+            dni_afiliado,
+            nmformulario,
+            cdtipo_afiliado,
+            cdtipo_cotizante,
+            cdsubtipo_cotizante,
+            cdtipo_doc_empleador,
+            nmdocumento_empleador,
+            snindicador_proporcional_dias,
+            cdtipo_generacion,
+            cdtipo_novedad,
+            cdtipo_tasa,
+            ptingreso_max_base_liq,
+            ptingreso_min_base_liq,
+            cdtipo_planilla,
+            cdtipo_proceso,
+            cdnueva_sucursal,
+            feinicio_vct,
+            fefin_vct,
+            cdvalor_vct,
+            cderror_proceso,
+            dserror_proceso,
+            dni_ingresa,
+            feingresa
+        ) 
+        SELECT 
+            seq_cpg_log_ejec_reproceso.NEXTVAL,
+            :poliza,
+            :periodoCotizacion,
+            :dniAfiliado,
+            :nmFormulario,
+            :tipoAfiliado,
+            :tipoCotizante,
+            :subTipoCotizante,
+            :tipoEmpleador,
+            :documentoEmpleador,
+            :snProporcional,
+            :cdTipoGeneracion,
+            :cdtipoNovedad,
+            :cdtipoTasa,
+            :ingresoBaseMaximoLiq,
+            :ingresoBaseMinimoLiq,
+            :cdtipoPlanilla,
+            :cdtipoProceso,
+            :cdNuevaSucursal,
+            :fechaInicioVct,
+            :fechaFinVct,
+            :snVct,
+            :cdErrorProceso,
+            :dsErrorProceso,
+            :dniIngresa,
+            SYSDATE
+        FROM DUAL 
+    ]]>
+    </entry>
+    
+    <entry key="consultar.logReproceso.ejecucion">
+    <![CDATA[
+        SELECT * FROM
+            tcpg_log_ejec_reproceso l
+        WHERE
+            febaja IS NULL
+            AND cderror_proceso = '01'
+            AND NOT EXISTS (
+                SELECT
+                    1
+                FROM
+                    tcpg_estado_cuenta e
+                WHERE
+                    e.nmpoliza = l.nmpoliza
+                    AND e.nmperiodo = l.nmperiodo
+                    AND e.dni_afiliado = l.dni_afiliado
+                    AND e.cdtipo_afiliado = l.cdtipo_afiliado
+                    AND e.cdtipo_cotizante = l.cdtipo_cotizante
+                    AND e.cdestado_pago NOT IN (
+                        '01',
+                        '03'
+                    )
+            )
+            AND NOT EXISTS (
+                SELECT
+                    1
+                FROM
+                    TCPG_RENES r
+                WHERE
+                    r.npoliza = l.nmpoliza
+                    AND r.nmperiodo = l.nmperiodo
+                    AND r.dni_empleado = l.dni_afiliado
+                    AND r.cdtipo_cotizante IN (
+                        SELECT
+                            cdtipo_cotizante
+                        FROM
+                            tcpg_condiciones_cotiza
+                        WHERE
+                            cdtipo_afiliado = l.cdtipo_afiliado
+                    )
+            )
+        ORDER BY
+            feingresa DESC      
+    ]]>
+    </entry>
+    
+    <entry key="actualizar.logReproceso.ejecucion">
+    <![CDATA[
+        UPDATE tcpg_log_ejec_reproceso l SET l.dni_modifica =:dniModifica, l.femodifica = TRUNC(sysdate), l.febaja=sysdate  
+                    WHERE l.febaja is null
+                    and l.cderror_proceso = '01'
+                    and l.nmconsecutivo = :consecutivoRegistro
+    ]]>
+    </entry>
+    
+    <entry key="consultar.novedades.afiliado">
+    <![CDATA[
+         WITH 
+            -- busca las novedades
+            NOVEDADES AS (
+                SELECT N.*,CC.CDTIPO_AFILIADO FROM (
+                    SELECT
+                        N.NMCONSECUTIVO ID,
+                        N.NMFORMULARIO_PAGO,
+                        CA.NPOLIZA,
+                        N.TIPO_DOCUMENTO_EMPLEADO||N.DNI_EMPLEADO DNI,
+                        CA.NMPERIODO,
+                        N.TIPO_DOCUMENTO_EMPLEADOR,
+                        N.DNI_EMPLEADO,
+                        N.DNI_EMPLEADOR,
+                        NVL(CA.CDLEY,'1747') CDLEY,
+                        NVL(CA.CDTIPO_PLANILLA,'E') CDTIPO_PLANILLA,
+                        NVL(N.SNSLN,'N') SNSLN,
+                        NVL(N.SNIGE,'N') SNIGE,
+                        NVL(N.SNLMA,'N') SNLMA,
+                        NVL(N.SNVAC,'N') SNVAC,
+                        NVL(N.SNCXS,'N') SNCXS,
+                        NVL(N.NMIRP,0) NMIRP,
+                        NVL(N.NMDIAS_COTIZADOS,0) NMDIAS_COTIZADOS,
+                        NVL(N.POCOTIZACION_ATEP,0) POCOTIZACION_ATEP,    
+                        NVL(N.PTCOTIZACION,0) PTCOTIZACION,
+                        NVL(N.PTINGRESO_BASE_LIQ,0) PTINGRESO_BASE_LIQ,
+                        NVL(TRIM(N.SNING),'N') SNING,
+                        NVL(TRIM(N.SNRET),'N') SNRET,
+                        CA.NMPLANILLA,
+                        CA.FEPAGO,
+                        CA.DNI_APORTANTE_ORIGINAL RESPONSABLE,
+                        N.CDSUBTIPO_COTIZANTE,
+                        N.CDTIPO_AFILIADO TIPO_COTIZANTE,
+                        N.CDNUEVA_SUCURSAL CT,
+                        N.FEINICIO_VCT fechaInicioVCT, 
+                        N.FEFIN_VCT fechaFinVCT,
+                        DECODE(N.SNVCT,'S','X',N.SNVCT) SNVCT,
+                        N.NMCONSECUTIVO,
+                        CASE 
+                           WHEN N.CDTIPO_AFILIADO IS NULL AND CA.CDTIPO_PROCESO = 'I' THEN '59'
+                           WHEN N.CDTIPO_AFILIADO IS NULL AND CA.CDTIPO_PLANILLA ='Y' AND CA.CDTIPO_PROCESO = 'E' THEN '59'
+                           WHEN N.CDTIPO_AFILIADO IS NULL AND CA.CDTIPO_PLANILLA ='K' AND CA.CDTIPO_PROCESO = 'E' THEN '23'
+                           WHEN N.CDTIPO_AFILIADO IS NULL AND CA.CDTIPO_PROCESO = 'E' THEN '01'
+                           ELSE N.CDTIPO_AFILIADO
+                        END NOVEDAD_TIPO_COTIZANTE
+                        
+                    FROM T094_NOVEDADES N
+                    INNER JOIN T094_CONTROL_AUTOLIQUIDACIONES CA ON N.NMFORMULARIO_PAGO = CA.NMFORMULARIO_PAGO
+                    WHERE
+                        N.DNI_EMPLEADO = :dni
+                        AND N.TIPO_DOCUMENTO_EMPLEADO = :tipoDocEmpleado
+                        AND N.DNI_EMPLEADOR = :dniEmpleador
+                        AND N.TIPO_DOCUMENTO_EMPLEADOR = :tipoDocEmpleador
+                        AND N.NMPERIODO = SUBSTR(:periodo,5,2)||SUBSTR(:periodo,1,4)
+                                                    
+                ) N INNER JOIN TCPG_CONDICIONES_COTIZA CC ON CC.CDTIPO_COTIZANTE = N.NOVEDAD_TIPO_COTIZANTE
+                WHERE
+                    CC.CDTIPO_AFILIADO =:tipoAfiliado
+                    AND ((:tipoCotizante='23' AND CC.CDTIPO_AFILIADO=:tipoAfiliado AND CC.CDTIPO_COTIZANTE = :tipoCotizante)
+                        OR
+                    (:tipoCotizante<>'23' AND CC.CDTIPO_AFILIADO=:tipoAfiliado AND CC.CDTIPO_COTIZANTE <> '23'))
+
+        ),
+        -- los formularios afectados
+        FORMULARIOS AS (
+            SELECT DISTINCT NMFORMULARIO_PAGO FROM NOVEDADES
+        ),
+        -- los formularios independientes (solo aplica para 1747)
+        FORMULARIOS_IND AS (
+            SELECT DISTINCT NMFORMULARIO_PAGO FROM NOVEDADES N 
+            INNER JOIN T094_CUERPOLIZA_RIESGO C 
+                ON C.NPOLIZA = N.NPOLIZA 
+                AND C.DNI = N.DNI
+                AND  C.FEALTA <= TO_DATE(SUBSTR(:periodo,5)||SUBSTR(:periodo,1,4),'MMYYYY')
+                AND  C.FEBAJA >= LAST_DAY(TO_DATE(SUBSTR(:periodo,5)||SUBSTR(:periodo,1,4),'MMYYYY'))
+                AND  N.CDLEY = '2388'
+                AND  N.CDTIPO_PLANILLA IN ('I','A','M','Y','N')
+                AND EXISTS (SELECT 1 FROM FORMULARIOS X WHERE X.NMFORMULARIO_PAGO=N.NMFORMULARIO_PAGO)
+        ),
+        -- las leyes que se reportan, agrupadas x ley
+        LEY AS (
+            SELECT CDLEY FROM NOVEDADES GROUP BY CDLEY
+        ),
+        -- busca ausentismo de 1747 y 2388, les agrega tipo 'A' 
+        AUSENTISMO AS (
+            SELECT N.*,'A' TIPONOVEDAD 
+            FROM NOVEDADES N 
+            WHERE 
+                (SNSLN IN ('S','X') OR
+                SNIGE IN ('S','X') OR
+                SNLMA IN ('S','X') OR
+                SNVAC IN ('S','X','L') OR
+                SNCXS IN ('S','X') OR
+                NMIRP > 0)
+        ),
+        
+        -- busca laboradas de 2388, les agrega tipo 'L2388' 
+        LABORADAS AS (
+            SELECT N.*,'L2388' TIPONOVEDAD 
+            FROM NOVEDADES N 
+            WHERE NOT 
+                (SNSLN IN ('S','X') OR
+                SNIGE IN ('S','X') OR
+                SNLMA IN ('S','X') OR
+                SNVAC IN ('S','X','L') OR
+                SNCXS IN ('S','X') OR
+                NMIRP > 0)
+            
+             UNION
+            SELECT N.*,'L2388' TIPONOVEDAD 
+            FROM NOVEDADES N WHERE 
+                PTCOTIZACION > 0
+                AND CDLEY = '2388'
+        ),
+        -- busca ausentismo de 1747, les agrega tipo 'L1747'
+        LABORADAS_1747 AS (
+            SELECT * FROM (
+                SELECT N.*,'L1747' TIPONOVEDAD 
+                FROM NOVEDADES N
+                WHERE NOT 
+                    (SNSLN IN ('S','X') OR
+                    SNIGE IN ('S','X') OR
+                    SNLMA IN ('S','X') OR
+                    SNVAC IN ('S','X','L') OR
+                    SNCXS IN ('S','X') OR
+                    NMIRP > 0)
+                    
+                 UNION
+                SELECT N.*,'L1747' TIPONOVEDAD 
+                FROM NOVEDADES N WHERE PTCOTIZACION > 0 AND CDLEY = '1747'
+                    UNION
+                SELECT N.*,'L1747' TIPONOVEDAD 
+                FROM NOVEDADES N WHERE  N.PTCOTIZACION > 0
+                    AND NMFORMULARIO_PAGO IN (SELECT NMFORMULARIO_PAGO FROM FORMULARIOS_IND X WHERE X.NMFORMULARIO_PAGO=N.NMFORMULARIO_PAGO)
+            ) --WHERE NMCONSECUTIVO NOT IN (SELECT NMCONSECUTIVO FROM AUSENTISMO)
+        ),
+        -- unifica todas las novedades
+        UNIFICADOS AS (
+            SELECT * FROM AUSENTISMO
+                UNION
+            SELECT * FROM LABORADAS
+                UNION
+            SELECT * FROM LABORADAS_1747
+        )
+        -- solo devuelve las de ausentismo, y laboradas 2388, si no tiene ninguna novedad en ley=1747
+        -- de lo contrario devuelve procesado como 1747
+        SELECT * FROM UNIFICADOS WHERE TIPONOVEDAD = 'A'
+            OR (TIPONOVEDAD = 'L1747' AND EXISTS (SELECT 1 FROM UNIFICADOS WHERE CDLEY = '1747'))
+            OR (TIPONOVEDAD = 'L2388' AND NOT EXISTS (SELECT 1 FROM UNIFICADOS WHERE CDLEY = '1747'))
+    ]]>
+    </entry>
+    
+    <entry key="consultar.tipoCotizante.borrado">
+        <![CDATA[
+            SELECT G.CDTIPO_COTIZANTE FROM (
+                SELECT CDTIPO_COTIZANTE,  FEINGRESO
+                FROM T094_HISTORICO_AFIL_BORRADOS 
+                WHERE 
+                        CDTIPO_AFILIADO = :tipoAfiliado
+                        AND NMCERTIFICADO = :certificado
+                        AND NPOLIZA = :poliza
+                        AND DNI = :afiliado
+                        ORDER BY FEINGRESO DESC
+                        ) G
+            WHERE ROWNUM = 1
+        ]]>
+    </entry>
+    
+    <entry key="consultar.novedad.vct">
+        <![CDATA[
+            SELECT 
+                     N.CDNUEVA_SUCURSAL CT,
+                     N.FEINICIO_VCT fechaInicioVCT, 
+                     N.FEFIN_VCT fechaFinVCT,
+                     DECODE(N.SNVCT,'S','X',N.SNVCT) SNVCT
+             FROM T094_NOVEDADES N
+             WHERE
+                     NMPERIODO = :periodo
+                     AND DNI_EMPLEADO = :afiliado
+                     AND CDTIPO_AFILIADO = :tipoCotizante
+                     AND NPOLIZA = :poliza
+                     AND DECODE(N.SNVCT,'S','X',N.SNVCT)  = 'X'
+             ORDER BY FEINICIO_VCT ASC
+        ]]>
+    </entry>
+    
+    <entry key="insertar.traza.afectacion.saldo">
+        <![CDATA[
+            INSERT INTO TCPG_AFECTACION_EC 
+              (NMPOLIZA,
+              NMPERIODO,
+              FEINGRESA,
+              DNI_INGRESA,
+              CDESTADO,
+              PTVALOR,
+              NMCOSECUTIVO,
+              DSOBSERVACION)                
+            SELECT :poliza, :periodo, SYSDATE, :dniIngresa, :estado, :valor, SEQ_CPG_AFECTACION_EC.NEXTVAL, :observacion 
+            FROM DUAL WHERE NOT EXISTS ( 
+                SELECT 1 FROM TCPG_AFECTACION_EC WHERE NMPOLIZA = :poliza AND  NMPERIODO = :periodo AND TRUNC(FEINGRESA) = TRUNC(SYSDATE)
+            )
+    ]]>
+    </entry>
+    
+    <entry key="borrar.estado.cuenta.detalle">
+        <![CDATA[
+            DELETE
+            FROM TCPG_ESTADO_CUENTA_DTLLE WHERE 
+            NMPOLIZA = :poliza
+            AND DNI_AFILIADO = :afiliado
+            AND CAST(NMPERIODO AS NUMBER) >= CAST(:periodoInicial as NUMBER)
+            AND CAST(NMPERIODO AS NUMBER) <= CAST(:periodoFinal as NUMBER)
+            AND CDTIPO_COTIZANTE IN (SELECT CDTIPO_COTIZANTE FROM TCPG_CONDICIONES_COTIZA where CDTIPO_AFILIADO = :tipoAfiliado)
+         ]]>
+    </entry>
+    
+    
+    <entry key="consulta.datos.afectacion.planilla.padre">
+        <![CDATA[
+            SELECT SUM(N.PTINGRESO_BASE_LIQ) IBC, 
+                SUM(N.NMDIAS_COTIZADOS) DIAS, 
+                SUM(N.POCOTIZACION_ATEP) TASA, 
+                SUM(N.PTCOTIZACION) COTIZACION,
+                DECODE(NMFORMULARIO_PAGO_PADRE,NMFORMULARIO_PAGO_HIJO,'S','N') ES_MODIFICACION
+                FROM T094_NOVEDADES N
+            INNER JOIN TCPG_AFECT_PLANILLAS_N PLN ON N.NMFORMULARIO_PAGO = PLN.NMFORMULARIO_PAGO_PADRE
+            WHERE PLN.NMFORMULARIO_PAGO_HIJO = :numeroFormularioHijo
+                AND N.DNI_EMPLEADO = :dni
+                AND PLN.FEREVERSA IS NULL
+                AND NOT 
+                    (NVL(SNSLN,'N')  IN ('S','X') OR
+                    NVL(SNIGE,'N')  IN ('S','X') OR
+                    NVL(SNLMA,'N')  IN ('S','X') OR
+                    NVL(SNVAC,'N')  IN ('S','X','L') OR
+                    NVL(SNCXS,'N')  IN ('S','X') OR
+                     NMIRP > 0
+                    )
+            GROUP BY DECODE(NMFORMULARIO_PAGO_PADRE,NMFORMULARIO_PAGO_HIJO,'S','N')
+        ]]>
+    </entry>
+    
+    <entry key="borrar.estado.cuenta.control">
+        <![CDATA[
+           DELETE FROM TCPG_CONTROL_ESTADOCUENTA
+            WHERE NMPOLIZA IN (:poliza) AND NMPERIODO=:periodo
+            AND (SELECT COUNT(1) FROM TCPG_ESTADO_CUENTA WHERE NMPOLIZA IN (:poliza) AND NMPERIODO=:periodo) < 1
+         ]]>
+    </entry>
+    
+    
+    <entry key="obtener.ec.afectados.pago.independientes">
+        <![CDATA[
+            SELECT NMCONSECUTIVO_EC,NMCONSECUTIVO,NMPERIODO,NMPOLIZA
+             FROM TCPG_ESTADO_CUENTA_DTLLE D WHERE 
+            (NMFORMULARIO_PAGO,DNI_AFILIADO) IN (
+                SELECT NMFORMULARIO_PAGO,DNI_AFILIADO FROM TCPG_ESTADO_CUENTA_DTLLE 
+                    WHERE DNI_AFILIADO = :dni AND NMPOLIZA = :poliza AND NMPERIODO = :periodo
+                ) AND NMPOLIZA <> :poliza
+                AND NOT EXISTS(
+                    SELECT NPOLIZA FROM t094_novedades WHERE NMFORMULARIO_PAGO = D.NMFORMULARIO_PAGO
+                        AND DNI_EMPLEADO = SUBSTR(:dni,2) 
+                        AND TIPO_DOCUMENTO_EMPLEADO = SUBSTR(:dni,1,1)
+                        AND NPOLIZA <> :poliza
+                )
+        ]]>
+    </entry>
+    
+    <entry key="obtener.formularios.afectados.pago.independientes">
+        <![CDATA[
+        SELECT NMFORMULARIO_PAGO FROM TCPG_ESTADO_CUENTA_DTLLE 
+                    WHERE DNI_AFILIADO = :dni AND NMPOLIZA = :poliza AND NMPERIODO = :periodo
+        ]]>
+    </entry>
+    
+    <entry key="borrar.detalle.ec.afectados.pago.independientes">
+        <![CDATA[
+            DELETE FROM TCPG_ESTADO_CUENTA_DTLLE WHERE NMCONSECUTIVO = :consecutivo
+        ]]>
+    </entry>
+    
+    <entry key="desmarcarPago.ec.afectados.pago.independientes">
+        <![CDATA[
+            UPDATE TCPG_ESTADO_CUENTA SET 
+                CDESTADO_PAGO=:estado, 
+                SNEXISTE_PAGO='N',
+                PTCOTIZACION_REPORTADA=0,
+                PTINGRESO_BASE_LIQ_REPORTADO=0,
+                NMDIAS_REPORTADOS=0,
+                POTASA_REPORTADA=0,
+                PTSALDO = PTCOTIZACION_ESPERADA*-1,
+                FEMODIFICA = SYSDATE
+            WHERE NMCONSECUTIVO = :consecutivo 
+        ]]>
+    </entry>
+    
+</properties>

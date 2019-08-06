@@ -1,0 +1,64 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<configuration scan="true" scanPeriod="10 seconds">
+
+	<contextName>procesador-reproceso</contextName>
+	<jmxConfigurator />
+
+	<timestamp key="fechahora" datePattern="yyyyMMdd_HH.mm.ss" />
+
+	<!-- Console output -->
+	<appender name="STDOUT" class="ch.qos.logback.core.ConsoleAppender">
+		<!-- encoder defaults to ch.qos.logback.classic.encoder.PatternLayoutEncoder -->
+		<encoder>
+			<pattern>%date{ISO8601} %-5level [%thread] CLA=%logger{36} %X{sourceThread} %X{akkaSource}| %msg%n</pattern>
+		</encoder>
+	</appender>
+
+	<appender name="suraLogger" class="com.sura.arl.reproceso.util.SuraAppender">
+		<encoder>
+			<pattern>%m</pattern>
+		</encoder>
+	</appender>
+
+	<appender name="STDOUT_ASYNC" class="ch.qos.logback.classic.AsyncAppender">
+		<queueSize>1000</queueSize>
+		<appender-ref ref="STDOUT" />
+	</appender>
+
+	<logger name="com.sura.arl" level="debug" additivity="false">
+		<appender-ref ref="STDOUT_ASYNC" />
+		<appender-ref ref="suraLogger" />
+	</logger>
+
+	<logger name="akka" level="info" additivity="false">
+		<appender-ref ref="suraLogger" />
+	</logger>
+
+	<logger name="org.springframework" level="info">
+		<appender-ref ref="suraLogger" />
+	</logger>
+
+	<logger name="org.springframework.transaction" level="off">
+		<appender-ref ref="suraLogger" />
+	</logger>
+
+	<logger name="akka" level="info" additivity="false">
+		<appender-ref ref="suraLogger" />
+		<appender-ref ref="STDOUT_ASYNC" />
+	</logger>
+    
+    <logger name="akka.stream.alpakka.amqp" level="info" additivity="false">
+		<appender-ref ref="suraLogger" />
+        <appender-ref ref="STDOUT_ASYNC" />
+    </logger>
+
+	<logger name="com.zaxxer.hikari" level="off">
+		<appender-ref ref="suraLogger" />
+	</logger>
+
+	<logger name="ch.qos.logback" level="off" additivity="false">
+		<appender-ref ref="suraLogger" />
+	</logger>
+
+</configuration>

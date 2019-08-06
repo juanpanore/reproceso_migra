@@ -1,0 +1,64 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE properties SYSTEM "http://java.sun.com/dtd/properties.dtd">
+
+<properties>
+
+    <entry key="escoger.cambios.estado.cuenta">
+        <![CDATA[
+            UPDATE
+                    TCPG_INTEGRA_ESTADO_CTA CEC
+            SET
+                    CEC.CDESTADO = 'ENCOLA',
+                    CEC.DNI_MODIFICA = :dniModifica,
+                    CEC.FEMODIFICA = SYSDATE
+            WHERE
+                    CDESTADO IN ('NUEVO','ERROR_ENVIO')
+                    AND ROWNUM <= :limite
+        ]]>
+    </entry>
+	
+    <entry key="marcar.cambios.estado.cuenta">
+        <![CDATA[
+		UPDATE
+			TCPG_INTEGRA_ESTADO_CTA CEC
+		SET
+			CEC.CDESTADO =:estado,
+			CEC.DSMENSAJE_MQ =:mensaje,
+			CEC.DNI_MODIFICA =:dniModifica,
+			CEC.FEMODIFICA = SYSDATE
+		WHERE
+			CEC.NMCONSECUTIVO =:consecutivo
+        ]]>
+    </entry>
+
+    <entry key="tramitar.cambio.estado.cuenta">
+        <![CDATA[
+		UPDATE
+			TCPG_INTEGRA_ESTADO_CTA CEC
+		SET
+			CEC.CDESTADO = :estado,
+			CEC.DSMENSAJE_MQ = :mensaje,
+			CEC.DNI_MODIFICA = :dniModifica,
+			CEC.FEMODIFICA = SYSDATE
+		WHERE
+			CEC.NMCONSECUTIVO =:consecutivo
+        ]]>
+    </entry>
+    
+    <entry key="ingresar.cambios.estado.cuenta">
+        <![CDATA[
+        INSERT INTO TCPG_INTEGRA_ESTADO_CTA CEC
+            (NMCONSECUTIVO,NMPOLIZA,DNI,CDESTADO,DSPARAMETROS,FEINGRESA,DNI_INGRESA )
+        VALUES
+            (:consecutivo, :poliza, :dni, :estado, :parametros, SYSDATE, :dniIngresa)
+     ]]>
+    </entry>  
+    
+    <entry key="obtener.secuencia">
+        <![CDATA[
+        SELECT SEQ_CPG_INTEGRA_ESTADO_CTA.NEXTVAL FROM DUAL
+    ]]>
+    </entry>      
+    
+    
+</properties>
