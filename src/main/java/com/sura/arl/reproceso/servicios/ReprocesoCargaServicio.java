@@ -28,6 +28,7 @@ import com.sura.arl.reproceso.accesodatos.NovedadesDao;
 import com.sura.arl.reproceso.accesodatos.ReprocesoPendienteDao;
 import com.sura.arl.reproceso.actores.ReprocesoAfiliadoActor;
 import com.sura.arl.reproceso.modelo.ReprocesoCompletado;
+import com.sura.arl.reproceso.modelo.integrador.IntegradorEsperadaAfiliado;
 import com.sura.arl.reproceso.servicios.generales.InexactitudConsolidadoServicio;
 import com.sura.arl.reproceso.util.JSON;
 import com.sura.arl.reproceso.util.VariablesEntorno;
@@ -102,7 +103,7 @@ public class ReprocesoCargaServicio {
      * @throws InterruptedException
      */
 
-    public void ejecutar(Long numFormulario) {
+    public void ejecutar(Long numFormulario ) {
         Objects.requireNonNull(numFormulario, "El numero de formulario no puede ser nulo");
 
         // Obtiene los afiliados con novedades de ingreso y/o retiro y los
@@ -116,6 +117,68 @@ public class ReprocesoCargaServicio {
 
         List<Afiliado> afiliados = novedadesDao.obtenerAfiliadosXformulario(numFormulario, Optional.empty(),
                 Optional.empty());
+        timer.stop();
+
+        LOG.info("Afiliados encontrados:{} para formulario:{}, tiempo: {}", afiliados.size(), numFormulario,
+                timer.elapsed(TimeUnit.SECONDS));
+
+        // solo deberia empezar a procesar si encontro afiliados
+        if (!afiliados.isEmpty()) {
+
+            if (!esFormularioAnticipado(afiliados.get(0).getCobertura().getPoliza(),
+                    afiliados.get(0).getCobertura().getPeriodoAnioMes(), numFormulario)) {
+
+                CountDownLatch latch = new CountDownLatch(1);
+
+                Source.from(afiliados)
+                        .ask(MENSJ_X_ACTOR, reprocesoAfiliadoActor, String.class, Timeout.apply(5, TimeUnit.MINUTES))
+                        .runWith(Sink.ignore(), materializer).whenComplete((done, e) -> {
+                            if (e != null) {
+                                LOG.error(
+                                        "Error reprocesando el formulario {} con error {}, reenviando a reproceso el formulario.",
+                                        numFormulario, e.getMessage(), e);
+                                ejecutar(numFormulario);
+                            } else {
+                                LOG.info("Se ha reprocesado exitosamente el formulario {} ", numFormulario);
+                                enviarMensajeConsolidador(afiliados.get(0), Optional.of(numFormulario));
+                            }
+                            latch.countDown();
+                        });
+                try {
+                    latch.await();
+                } catch (InterruptedException e) {
+                    // TODO Auto-generated catch block
+                    LOG.info("Ocurrio un error al esperar por el procesamiento del formulario {} ", numFormulario, e);
+                }
+            } else {
+                LOG.info("No se reprocesa formulario:{}, por ser pago anticipado, se registra en reprocesos pendientes",
+                        numFormulario);
+            }
+        } else {
+            LOG.info("No se reprocesa formulario:{}, sin registros", numFormulario);
+        }
+    }
+    
+    /**
+     * Ejecuta el reproceso para numero de formulario especifico
+     * 
+     * @param numFormulario
+     * @throws InterruptedException
+     */
+
+    public void ejecutarReprocesoAfiliado(Long numFormulario, IntegradorEsperadaAfiliado afiliado) {
+        Objects.requireNonNull(numFormulario, "El numero de formulario no puede ser nulo");
+
+        // Obtiene los afiliados con novedades de ingreso y/o retiro y los
+        // ingresa para el proceso de afiliacion
+
+        // TODO: se comenta este proceso hasta saber q se va hacer con el
+        // ingresarNovedadIngresoRetiroAfiliaciones(numFormulario);
+
+        Stopwatch timer = new Stopwatch().start();
+        LOG.info("Buscando afiliados para el fomulario: {} ...", numFormulario);
+
+        List<Afiliado> afiliados = novedadesDao.obtenerAfiliadoXformulario(numFormulario, afiliado);
         timer.stop();
 
         LOG.info("Afiliados encontrados:{} para formulario:{}, tiempo: {}", afiliados.size(), numFormulario,

@@ -245,7 +245,9 @@ public class ReprocesoAfiliadoServicio {
             }
 
             try {
+            	 LOG.info("Se inicia actualizacion ec");
                 estadoCuentaDao.actualizar(esperadaActualizada.build());
+                LOG.info("Se inicia ingreso dtlle");
                 detalleEstadoCuentaDao.registrar(resultadoRecalculo.getPagos());
                 registrarTrazaCambio(esperadaActual, esperadaActualizada.build(), afiliado, ctOriginal, ctpOriginal,
                         tasaOriginal);
@@ -259,7 +261,7 @@ public class ReprocesoAfiliadoServicio {
             }
 
             // Se actualiza el ultimo ibc, salario y periodo cotizado
-            ultimosValoresCotizadosServicio.actualizar(afiliado, periodoYYYYMM);
+           // ultimosValoresCotizadosServicio.actualizar(afiliado, periodoYYYYMM);
 
             // si llega a esta excepcion, ocurrio algun error controlado
         } catch (ForzarReprocesoExcepcion fr) {

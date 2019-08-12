@@ -235,7 +235,7 @@
                                                                ' de otra cobertura como independiente')),
                EC.CDESTADO_PAGO                = :estadoPago,
                EC.PTSALDO                      = :saldo
-         WHERE DNI_AFILIADO = :dni
+         WHERE EC.DNI_AFILIADO = :dni
            AND EC.NMPERIODO = :nmperiodo
            AND EC.CDTIPO_AFILIADO = NVL(:tipoAfiliado, EC.CDTIPO_AFILIADO)
            AND EC.NMPOLIZA = :poliza
@@ -404,6 +404,59 @@
                 CA.CDTIPO_PROCESO    
     ]]>
    </entry>
+
+	 <entry key="consulta.afiliadoXformulario">
+    <![CDATA[
+        SELECT DISTINCT
+            N.NMPERIODO PERIODO,
+            N.TIPO_DOCUMENTO_EMPLEADO||N.DNI_EMPLEADO DNI,
+            N.CDTIPO_AFILIADO tipoCotizante,
+            N.CDSUBTIPO_COTIZANTE subtipoCotizante,
+            CN.NPOLIZA,
+            N.TIPO_DOCUMENTO_EMPLEADOR tipoDocEmpleador,
+            N.DNI_EMPLEADOR dniEmpleador,
+            CC.PTINGRESO_MAX_BASE_LIQ,
+            CC.PTINGRESO_MIN_BASE_LIQ,
+            CC.CDTIPO_GENERACION,
+            CC.CDTIPO_TASA,
+            CC.SNINDICADOR_PROPORCIONAL_DIAS,
+            CC.CDTIPO_NOVEDAD,
+            CC.CDTIPO_AFILIADO,
+            NVL(CA.CDTIPO_PLANILLA,'E') CDTIPO_PLANILLA,
+            CA.CDTIPO_PROCESO,
+            MIN(N.CDNUEVA_SUCURSAL) CT,
+            MIN(N.FEINICIO_VCT) fechaInicioVCT, 
+            MAX(N.FEFIN_VCT) fechaFinVCT,
+            MAX(DECODE(N.SNVCT,'S','X',N.SNVCT)) SNVCT
+         FROM T094_CONTROL_NOVEDADES CN
+            INNER JOIN T094_CONTROL_AUTOLIQUIDACIONES CA ON CA.NMFORMULARIO_PAGO = CN.NMFORMULARIO_PAGO
+            INNER JOIN T094_NOVEDADES N ON CN.NMFORMULARIO_PAGO = N.NMFORMULARIO_PAGO
+            LEFT JOIN TCPG_CONDICIONES_COTIZA CC ON CC.CDTIPO_COTIZANTE = N.CDTIPO_AFILIADO
+         WHERE 
+            --NVL(CN.SNPROCESADO, 'N') = 'N' AND
+            NVL(N.SNPROCESADO, 'N') = 'N'
+            AND N.NMFORMULARIO_PAGO = :numeroFormulario
+            AND N.DNI_EMPLEADO = :numeroDocumento
+            AND N.TIPO_DOCUMENTO_EMPLEADO = :tipoDocumento
+            GROUP BY N.NMPERIODO,
+                N.TIPO_DOCUMENTO_EMPLEADO||N.DNI_EMPLEADO,
+                N.CDTIPO_AFILIADO,
+                N.CDSUBTIPO_COTIZANTE,
+                CN.NPOLIZA,
+                N.TIPO_DOCUMENTO_EMPLEADOR,
+                N.DNI_EMPLEADOR,
+                CC.PTINGRESO_MAX_BASE_LIQ,
+                CC.PTINGRESO_MIN_BASE_LIQ,
+                CC.CDTIPO_GENERACION,
+                CC.CDTIPO_TASA,
+                CC.SNINDICADOR_PROPORCIONAL_DIAS,
+                CC.CDTIPO_NOVEDAD,
+                CC.CDTIPO_AFILIADO,
+                NVL(CA.CDTIPO_PLANILLA,'E'),
+                CA.CDTIPO_PROCESO    
+    ]]>
+   </entry>
+	
 
    <entry key="actualizar.item.estado.cuenta">
     <![CDATA[

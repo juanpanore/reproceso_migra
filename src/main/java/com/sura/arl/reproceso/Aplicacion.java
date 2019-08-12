@@ -144,6 +144,7 @@ public class Aplicacion {
     private static void ejecutarIntegrador() throws ParseException {
         System.out.println("---> buscando mensajes integrador...");
         gestionDeCambiosServicio.tramitarCambiosEstadoCuenta();
+        //gestionDeCambiosServicio.procesarCambiosEstadoCuentaMasivo();
         /*SimpleDateFormat formatter = new SimpleDateFormat("yyyy-MM-dd");
         Date startDate = formatter.parse("2016-01-01");
         Date endDate = formatter.parse("2019-07-01");

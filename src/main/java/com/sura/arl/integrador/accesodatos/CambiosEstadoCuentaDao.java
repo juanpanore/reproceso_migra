@@ -84,7 +84,29 @@ public class CambiosEstadoCuentaDao extends AbstractDAO {
         params.put("inicio",inicio);
         params.put("fin",fin);
         //String sql = queriesDAO.getQuery("consultar.cambios.estado.cuenta");
-        String sql = " SELECT * FROM ( SELECT CEC.NMCONSECUTIVO, CEC.NMPOLIZA, CEC.DNI, CEC.DSPARAMETROS , ROW_NUMBER() OVER (ORDER BY NMCONSECUTIVO) Row_Num FROM TCPG_INTEGRA_ESTADO_CTA CEC WHERE CDESTADO = 'ENCOLA') WHERE Row_Num BETWEEN :inicio and :fin";
+        String sql = " SELECT * FROM ( SELECT CEC.NMCONSECUTIVO, CEC.NMPOLIZA, CEC.DNI, CEC.DSPARAMETROS , ROW_NUMBER() OVER (ORDER BY NMCONSECUTIVO) Row_Num FROM TCPG_INTEGRA_ESTADO_CTA CEC WHERE CDESTADO IN('NUEVO','ENCOLA') AND SUBSTR(DSPARAMETROS,\r\n" + 
+        		"                INSTR(dsparametros, 'tipo:') + 5,\r\n" + 
+        		"                INSTR(SUBSTR(DSPARAMETROS,INSTR(dsparametros, 'tipo:') + 5), ',')-1) IN ('AFILIACION','RETIRO','MOVER_COBERTURA')\r\n" + 
+        		"                ) WHERE Row_Num BETWEEN :inicio and :fin";
+
+        return getJdbcTemplate().query(sql, params, (ResultSet rs, int index) -> {
+
+            Registro registro = new Registro();
+            registro.setId(rs.getLong("NMCONSECUTIVO"));
+            registro.setDni(rs.getString("DNI"));
+            registro.setPoliza(rs.getString("NMPOLIZA"));
+            registro.setDsParametros(rs.getString("DSPARAMETROS"));
+            return registro;
+        });
+
+    }
+    
+    public List<Registro> consultarCambiosEstadoCuenta() throws IntegradorEsperadasExcepcion {
+
+        Map<String, Object> params = new HashMap<>();
+        params.put("limite", Integer.parseInt(getVarEntorno().getValor("negocio.numero.registros")));
+
+        String sql = queriesDAO.getQuery("consultar.cambios.estado.cuenta");
 
         return getJdbcTemplate().query(sql, params, (ResultSet rs, int index) -> {
 

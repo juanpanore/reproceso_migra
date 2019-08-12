@@ -26,6 +26,7 @@ import com.sura.arl.reproceso.modelo.DetallePago;
 import com.sura.arl.reproceso.modelo.InfoNovedadVCT;
 import com.sura.arl.reproceso.modelo.TipoPlanilla;
 import com.sura.arl.reproceso.modelo.excepciones.AccesoDatosExcepcion;
+import com.sura.arl.reproceso.modelo.integrador.IntegradorEsperadaAfiliado;
 
 /**
  * @author jorge
@@ -250,6 +251,166 @@ public class NovedadesDao extends AbstractDAO {
                     return af;
                 });
     }
+    
+    /**
+     * Devuelve un listado de afiliados que estén en un formulario Solo si el
+     * SNPROCESADO de cada afiliado no es S
+     * 
+     * @param numeroFormulario
+     * @return
+     */
+    public List<Afiliado> obtenerAfiliadoXformulario(Long numeroFormulario, IntegradorEsperadaAfiliado afiliado) {
+        Map<String, Object> params = new HashMap<String, Object>();
+        params.put("numeroFormulario", numeroFormulario);
+        params.put("numeroDocumento", afiliado.getDniAfiliado().substring(1));
+        params.put("tipoDocumento", afiliado.getDniAfiliado().substring(0, 1));
+        params.put("tipoCotizante", afiliado.getTipoCotizante());
+        
+		
+        String sql = "consulta.afiliadoXformulario";
+
+     
+
+        return getJdbcTemplate().query(getVarEntorno().getValor(sql), params, (rs, nm) -> {
+            Afiliado af = new Afiliado();
+            Cobertura cb = new Cobertura();
+            Condicion cn = new Condicion();
+            Legalizacion lg = new Legalizacion();
+            InfoNovedadVCT iv = new InfoNovedadVCT();
+
+            // datos basicos del afiliado
+            af.setDni(rs.getString("dni"));
+            af.setTipoAfiliado(rs.getString("CDTIPO_AFILIADO"));
+            af.setTipoCotizante(rs.getString("tipoCotizante"));
+            af.setSubtipoCotizante(rs.getString("subtipoCotizante"));
+
+            af.setTipoDocumentoEmpleador(TipoDocumento.tipoDocumentoPorEquivalencia(rs.getString("tipoDocEmpleador")));
+            af.setDniEmpleador(rs.getString("dniEmpleador"));
+            af.setPeriodoCotizacion(rs.getString("periodo"));
+
+            // datos basicos de la cobertura
+            cb.setPoliza(rs.getString("NPOLIZA"));
+            cb.setPeriodo(af.getPeriodoCotizacion());
+
+            // datos de las condiciones
+            // si la consulta no encontro relacion entre el tipoCot y las condiciones
+            // estos valores llegan null
+            cn.setIndicadorDias(rs.getString("SNINDICADOR_PROPORCIONAL_DIAS"));
+            cn.setTipoGeneracion(rs.getString("CDTIPO_GENERACION"));
+            cn.setTipoNovedad(rs.getString("CDTIPO_NOVEDAD"));
+            cn.setTipoTasa(rs.getString("CDTIPO_TASA"));
+            cn.setTipoAfiliado(rs.getString("CDTIPO_AFILIADO"));
+            cn.setIbcMaximo(rs.getInt("PTINGRESO_MAX_BASE_LIQ"));
+            cn.setIbcMinimo(rs.getInt("PTINGRESO_MIN_BASE_LIQ"));
+
+            // datos de la legalizacion
+            lg.setNumeroFormulario(numeroFormulario);
+            lg.setTipoPlanilla(TipoPlanilla.valueOf(rs.getString("CDTIPO_PLANILLA")));
+            lg.setTipoProceso(TipoProceso.valueOf(rs.getString("CDTIPO_PROCESO")));
+
+            // datos de vct reportado
+            iv.setCentroTrabajo(rs.getString("CT"));
+            iv.setFechaFinVCT(rs.getDate("FECHAFINVCT"));
+            iv.setFechaInicioVCT(rs.getDate("FECHAINICIOVCT"));
+            iv.setSnvct(rs.getString("SNVCT"));
+
+            // setea los objs del afiliado
+            af.setCobertura(cb);
+            af.setCondicion(cn);
+            af.setLegalizacion(lg);
+            af.setInfoVct(iv);
+
+            // setea si es independiente o no, segun la informacion ya validada desde la
+            // legalizacion
+            if (TipoProceso.I.equals(af.getLegalizacion().getTipoProceso())) {
+                af.setEsIndependiente(true);
+            }
+
+            // en caso de las variables de las condiciones esten null,
+            // implica que no encontro homologado el tipoCond en TCPG_CONDICIONES_COTIZANTE
+            // se reporta error
+            if (cn.getTipoGeneracion() == null) {
+                af.setTipoError(CatalogoErrores.COBERTURA_INVALIDA);
+                return af;
+            }
+
+            // se buscan todas las coberturas
+            List<DatosCobertura> datosCobertura = coberturaDao.consultarDatosCoberturaAfiliados(af.getDni(),
+                    cb.getPoliza(), cb.getPeriodo());
+
+            af.getCobertura().setTotalCoberturas(datosCobertura.size());
+
+            // setea si es independiente o no, segun la informacion ya validada desde la
+            // legalizacion
+            if (Arrays.stream(tiposCotizantesEstudiantes).anyMatch(af.getTipoCotizante()::equals)) {
+                af.setEsEstudiante(true);
+            }
+
+            if (af.esEstudiante()) {
+                af.setTipoAfiliadoEstadoCuenta(TIPO_AFILIADO_ESTUDIANTE);
+            } else if (af.esIndependiente()) {
+                af.setTipoAfiliadoEstadoCuenta(TIPO_AFILIADO_INDEPENDIENTE);
+            } else {
+                af.setTipoAfiliadoEstadoCuenta(TIPO_AFILIADO_EMPRESA);
+            }
+
+            // recorre las coberturas encontradas, lo normal es q solo sea 1,
+            // y sea el mismo tipoCot entre lo reportado y la afil.
+            // las coberturas vienen ordenadas x tope max ibc
+            for (DatosCobertura dc : datosCobertura) {
+
+                // Camino feliz: lo reportado es igual a la afiliacion
+                // devuelve el afiliado
+                if (af.getTipoCotizante().equals(dc.getCondicion().getTipoCotizante())
+                        && af.getCondicion().getIbcMaximo() != null) {
+                    setearDatosCobertura(af, dc);
+                    return af;
+                }
+
+                // --> Independiente
+                // si es un independiente y la cobertura es tipoAfiliado = 2
+                // entoncs devuelve esa
+                if (af.esIndependiente() && TIPO_AFILIADO_INDEPENDIENTE.equals(dc.getCondicion().getTipoAfiliado())) {
+                    // devuelve el primer registro q deberia ser el de tope max ibc
+                    setearDatosCobertura(af, dc);
+                    break;
+                }
+
+                // --> Estudiante
+                // si es un estudiante y tiene varias coberturas, la planilla es N,K,U y la
+                // cobertura actual
+                if (af.esEstudiante()
+                        && Arrays.stream(tiposCotizantesEstudiantes)
+                                .anyMatch(dc.getCondicion().getTipoCotizante()::equals)
+                        && Arrays.stream(tiposPlanillasEstudiantes).anyMatch(lg.getTipoPlanilla()::equals)
+                        && af.getCobertura().getTotalCoberturas() > 1) {
+
+                    setearDatosCobertura(af, dc);
+                    break;
+
+                }
+
+                // --> Dependiente
+                // si es empresa se la aplica a cualquiera tipoAfiliado = 1
+                if (!af.esIndependiente() && TIPO_AFILIADO_EMPRESA.equals(dc.getCondicion().getTipoAfiliado())) {
+                    // devuelve el primer registro q deberia ser el de tope max ibc
+                    setearDatosCobertura(af, dc);
+                    break;
+                }
+
+            }
+
+            // si no encontro coberturas
+            if (af.getCondicion().getIbcMaximo() == null) {
+                // el null se captura en reprocesoAfiliadoServicio para reportar el error
+                af.setTipoError(CatalogoErrores.COBERTURA_NO_ENCONTRADA);
+                return af;
+            }
+
+            return af;
+        });
+    }
+
 
     public void actualizarProcesado(Afiliado afiliado, boolean procesado, List<DetallePago> pagos) {
 

@@ -54,7 +54,7 @@ public class AfiliadosCoberturaDao extends AbstractDAO {
             cbrtr.setPeriodoEsMenorFealta(rs.getString("PERIODO_MENOR_FEALTA"));
         } catch (SQLException ignore) {
         }
-        //try{lg.setNumeroFormulario(rs.getLong("NMFORMULARIO_PAGO"));}catch(SQLException ignore){}
+        try{lg.setNumeroFormulario(rs.getLong("NMFORMULARIO_PAGO"));}catch(SQLException ignore){}
         try {
             cbrtr.setPeriodo(rs.getString("XPERIODO"));
         } catch (SQLException ignore) {
@@ -191,9 +191,11 @@ public class AfiliadosCoberturaDao extends AbstractDAO {
                     Periodo periodo = Periodo.parse(rs.getString("NMPERIODO"), "yyyyMM");
                     
                     afiliado.getCondicion().setPeriodoCotizacion(periodo.toString());
+                    afiliado.setPeriodoCotizacion(periodo.toString());
                     afiliado.getCobertura().setPeriodoGeneracion(Periodo.now().toString());
                     afiliado.getCobertura().setPeriodo(periodo.format("MMyyyy"));
                     afiliado.setPeriodoCotizacion(periodo.toString());
+                   // afiliado.getLegalizacion().setNumeroFormulario(Long.valueOf(rs.getString("NMFORMULARIO_PAGO")));
 
                     return afiliado;
 

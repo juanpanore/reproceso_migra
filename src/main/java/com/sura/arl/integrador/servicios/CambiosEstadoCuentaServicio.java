@@ -46,5 +46,9 @@ public class CambiosEstadoCuentaServicio {
     public void actualizarRegistrosATramitar(List<Registro> registros) throws IntegradorEsperadasExcepcion{
         dao.actualizarRegistrosATramitar(registros);
     }
+    
+    public List<Registro> consultarCambiosEstadoCuenta() throws IntegradorEsperadasExcepcion {
+        return dao.consultarCambiosEstadoCuenta();
+    }
 
 }

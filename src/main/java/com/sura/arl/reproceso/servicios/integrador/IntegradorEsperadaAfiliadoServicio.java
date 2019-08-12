@@ -5,6 +5,7 @@ import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
@@ -14,6 +15,7 @@ import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.dao.DataAccessException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -1025,14 +1027,44 @@ public class IntegradorEsperadaAfiliadoServicio {
         /*Afiliado afiliado = afiliadosCoberturaDao.consultarAfiliado(integradorEsperada.getPoliza(),
                 integradorEsperada.getDniAfiliado(), integradorEsperada.getTipoAfiliado(),
                 integradorEsperada.getTipoCotizante(), integradorEsperada.getCertificado());*/
-        Afiliado afiliado = afiliadosCoberturaDao.consultarAfiliadosFlujoCompleto(integradorEsperada.getFormularioPago(), 
-                integradorEsperada.getDniAfiliado().substring(1), integradorEsperada.getDniAfiliado().substring(0,1),integradorEsperada.getPeriodo()).get(0);
+        try {
+        	
+        	List<Afiliado>  afiliados = afiliadosCoberturaDao
+					.consultarAfiliadosFlujoCompleto(integradorEsperada.getFormularioPago(),
+							integradorEsperada.getDniAfiliado().substring(1),
+							integradorEsperada.getDniAfiliado().substring(0, 1), integradorEsperada.getPeriodo());
 
-        Periodo inicio = Periodo.parse(integradorEsperada.getPeriodo(),"yyyyMM");
-        Periodo fin = Periodo.parse(integradorEsperada.getPeriodo(),"yyyyMM");
+        	if(!afiliados.isEmpty()) {
+        		Afiliado afiliado= afiliados.get(0);
+        		Periodo inicio = Periodo.parse(integradorEsperada.getPeriodo(), "yyyyMM");
+    			Periodo fin = Periodo.parse(integradorEsperada.getPeriodo(), "yyyyMM");
+
+    			esperadaServicio.borrar(afiliado, inicio.toString(), fin.toString(), integradorEsperada.getDniUsuario());
+
+    			proceso(integradorEsperada, inicio, fin, afiliado);
+        	}
+        	else {
+
+				LOG.debug("************** REPROCESO_FLUJO_COMPLETO_SIN_AFILIACION");
+				int actualiza = cambiosEstadoCuentaDao.actualizarRegistroATramitar(integradorEsperada.getId(),
+						EstadoIntegrador.PROCESADO, integradorEsperada.getDniUsuario());
+				if (actualiza > 1) {
+					LOG.debug("************** Se actualiza estado a PROCESADO registro {} con formulario {}",
+							integradorEsperada.getId(), integradorEsperada.getFormularioPago());
+				}
+				reprocesoCargaServicio.ejecutarReprocesoAfiliado(Long.parseLong(integradorEsperada.getFormularioPago()),
+						integradorEsperada);
+    			
+        	}
+        	
+		
+        }
+		catch (Exception e) {
+			LOG.debug("Error ejecutando reproceso flujo completo",e);
+		}
         
-        esperadaServicio.borrar(afiliado, inicio.toString(), fin.toString(), integradorEsperada.getDniUsuario());
-
-        proceso(integradorEsperada, inicio, fin, afiliado);
+    	 
+       
+      
     }
 }

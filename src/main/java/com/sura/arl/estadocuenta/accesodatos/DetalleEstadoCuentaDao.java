@@ -41,19 +41,25 @@ public class DetalleEstadoCuentaDao extends AbstractDAO {
 
     @Transactional
     public void registrar(List<DetallePago> detalles) {
+    	try {
         if (detalles.isEmpty()) {
+    		LOG.info("Dtlle Vacio");
             return;
         }
 
         int i = 0;
         Map<String, Object> params[] = new Map[detalles.size()];
         for (DetallePago detalle : detalles) {
+        	LOG.info("ingreso dtlle formulario {}", detalle.getNumeroFormulario());
             Map<String, Object> paramsDetalles = obtenerParametros(detalle);
             params[i++] = paramsDetalles;
         }
 
         int[] x = getJdbcTemplate().batchUpdate(getVarEntorno().getValor("registro.detalles.est.cta"), params);
-
+    	}catch(Exception e) {
+    		LOG.info("Error al ingresar el dtlle",e);
+    	
+    	}
     }
 
     private Map<String, Object> obtenerParametros(DetallePago detalle) {
