@@ -6,7 +6,7 @@
     <entry key="escoger.cambios.estado.cuenta">
         <![CDATA[
             UPDATE
-                    TCPG_INTEGRA_ESTADO_CTA CEC
+                    TCPG_INTEGRA_ESTADO_CTA_TEMP CEC
             SET
                     CEC.CDESTADO = 'ENCOLA',
                     CEC.DNI_MODIFICA = :dniModifica,
@@ -20,7 +20,7 @@
     <entry key="marcar.cambios.estado.cuenta">
         <![CDATA[
 		UPDATE
-			TCPG_INTEGRA_ESTADO_CTA CEC
+			TCPG_INTEGRA_ESTADO_CTA_TEMP CEC
 		SET
 			CEC.CDESTADO =:estado,
 			CEC.DSMENSAJE_MQ =:mensaje,
@@ -34,7 +34,7 @@
     <entry key="tramitar.cambio.estado.cuenta">
         <![CDATA[
 		UPDATE
-			TCPG_INTEGRA_ESTADO_CTA CEC
+			TCPG_INTEGRA_ESTADO_CTA_TEMP CEC
 		SET
 			CEC.CDESTADO = :estado,
 			CEC.DSMENSAJE_MQ = :mensaje,
@@ -47,7 +47,7 @@
     
     <entry key="ingresar.cambios.estado.cuenta">
         <![CDATA[
-        INSERT INTO TCPG_INTEGRA_ESTADO_CTA CEC
+        INSERT INTO TCPG_INTEGRA_ESTADO_CTA_TEMP CEC
             (NMCONSECUTIVO,NMPOLIZA,DNI,CDESTADO,DSPARAMETROS,FEINGRESA,DNI_INGRESA )
         VALUES
             (:consecutivo, :poliza, :dni, :estado, :parametros, SYSDATE, :dniIngresa)

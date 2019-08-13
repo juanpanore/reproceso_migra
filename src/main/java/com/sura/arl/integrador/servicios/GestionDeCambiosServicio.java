@@ -61,26 +61,28 @@ public class GestionDeCambiosServicio {
     // @Scheduled(cron = "*/60 * * * * ?", zone = "GMT-5")
     public void tramitarCambiosEstadoCuenta() {
 
-        LOG.info("<<---- Inicio del Proceso de Cambios para el Estado de Cuenta ---->>");
+        LOG.info(
+                "<<---- Inicio del Proceso de Cambios para el Estado de Cuenta ---->>");
 
         // if (liderServicio.esLider()) {
         Double inicio = 0D;
         Double tamano = 5D;
-        Double fin = tamano; 
-        
+        Double fin = tamano;
+
         while (true) {
             try {
 
                 // Se marcan los registros a tramitar
                 // servicio.escogerRegistrosAGestionar();
-                LOG.info("obteniendo mensajes {} / {}",inicio, fin);
+                LOG.info("obteniendo mensajes {} / {}", inicio, fin);
                 // Se consulta los registros marcados
-                List<Registro> registros = servicio.consultarCambiosEstadoCuenta(inicio, fin);
-                LOG.info("mensajes encontrados: {}",registros.size());
-                if(registros.size()<1) {
+                List<Registro> registros = servicio
+                        .consultarCambiosEstadoCuenta(inicio, fin);
+                LOG.info("mensajes encontrados: {}", registros.size());
+                if (registros.size() < 1) {
                     break;
                 }
-                
+
                 // List<Registro> registros = new ArrayList<Registro>();
                 CountDownLatch latch = new CountDownLatch(registros.size());
 
@@ -93,25 +95,32 @@ public class GestionDeCambiosServicio {
                     IntegradorEsperada integradorEsperada = null;
                     LOG.info("Inicia ejecucion REPROCESO COMPLETO");
                     try {
-                        integradorEsperada = jsonToObjeto(registro.getMensajeMQ(), IntegradorEsperada.class);
-                    } catch (Exception ex) {
-                        LOG.error("Error jsonToObjeto:" + registro.getMensajeMQ(), ex);
-                    }
-                    EstadoIntegrador estado = EstadoIntegrador.ENVIADO;
-                    registro.setEstado(estado.name());
-                    servicio.actualizarRegistroATramitar(registro);
+                        integradorEsperada = jsonToObjeto(
+                                registro.getMensajeMQ(),
+                                IntegradorEsperada.class);
 
-                    // Se realiza el envio del mensaje al RabittMQ
-                    Future<Object> futuro = Patterns.ask(productor,
-                            integradorEsperada, Timeout.apply(2, TimeUnit.MINUTES));
-                    try {
-                        Await.result(futuro,
-                                Timeout.apply(2, TimeUnit.MINUTES).duration());
-                    } catch (Exception e) {
-                    	estado = EstadoIntegrador.ENCOLA;
+                        EstadoIntegrador estado = EstadoIntegrador.ENVIADO;
                         registro.setEstado(estado.name());
                         servicio.actualizarRegistroATramitar(registro);
-                        LOG.error("Error al esperar resultado del integrador", e);
+
+                        // Se realiza el envio del mensaje al RabittMQ
+                        Future<Object> futuro = Patterns.ask(productor,
+                                integradorEsperada,
+                                Timeout.apply(2, TimeUnit.MINUTES));
+
+                        Await.result(futuro,
+                                Timeout.apply(2, TimeUnit.MINUTES).duration());
+
+                    } catch (IllegalArgumentException ex) {
+                        LOG.error(
+                                "Error jsonToObjeto:" + registro.getMensajeMQ(),
+                                ex);
+                    } catch (Exception e) {
+                        EstadoIntegrador estado = EstadoIntegrador.ENCOLA;
+                        registro.setEstado(estado.name());
+                        servicio.actualizarRegistroATramitar(registro);
+                        LOG.error("Error al esperar resultado del integrador",
+                                e);
                     } finally {
                         latch.countDown();
                         LOG.info("Registros restantes {} ", latch.getCount());
@@ -122,9 +131,9 @@ public class GestionDeCambiosServicio {
             } catch (InterruptedException e) {
                 LOG.error(e.getMessage(), e);
             }
-            
-            inicio = tamano+1;
-            fin = fin + tamano;
+
+            inicio += tamano;
+            fin += tamano;
         }
         /*
          * } else { LOG.
@@ -132,7 +141,8 @@ public class GestionDeCambiosServicio {
          * ); }
          */
 
-        LOG.info("<<---- Fin del Proceso de Cambios para el Estado de Cuenta ---->>");
+        LOG.info(
+                "<<---- Fin del Proceso de Cambios para el Estado de Cuenta ---->>");
     }
     
     public void procesarCambiosEstadoCuentaMasivo() {

@@ -10,7 +10,9 @@ import org.springframework.context.annotation.AnnotationConfigApplicationContext
 import com.sura.arl.estadocuenta.actores.CotizacionEsperadaActor;
 import com.sura.arl.estadocuenta.actores.EstadoCuentaActor;
 import com.sura.arl.integrador.servicios.GestionDeCambiosServicio;
+import com.sura.arl.reproceso.actores.integrador.CoordinadorIntegradorEsperada;
 import com.sura.arl.reproceso.actores.integrador.IntegradorEsperadaActor;
+import com.sura.arl.reproceso.actores.integrador.IntegradorEsperadaPullActor;
 import com.sura.arl.reproceso.config.AplicacionConfig;
 import com.sura.arl.reproceso.modelo.integrador.IntegradorEsperada;
 import com.sura.arl.reproceso.modelo.integrador.IntegradorEsperada.TipoMensaje;
@@ -76,6 +78,9 @@ public class Aplicacion {
         ActorRef cotizacionActor = actorSystem.actorOf(
                 FromConfig.getInstance().props(Props.create(CotizacionEsperadaActor.class, context)),
                 "cotizacionActor");
+        
+        ActorRef coordinadorIntegradorActor = actorSystem.actorOf(Props.create(CoordinadorIntegradorEsperada.class, context));
+        
 
         /*actorSystem.actorOf(FromConfig.getInstance().props(Props.create(ReprocesoAfiliadoActor.class, context)),
                 "reprocesoAfiliadoActor");*/
@@ -84,7 +89,7 @@ public class Aplicacion {
         /*PlanillaLegalizadaConsumidor.activarConsumidor(context.getBean(AmqpConnectionDetails.class), reproceso,
                 context.getBean(VariablesEntorno.class).getValor("broker.queue.planillas.legalizadas"), context);
 */
-        if (context.getEnvironment().acceptsProfiles("estadoCuenta")) {
+        //if (context.getEnvironment().acceptsProfiles("estadoCuenta")) {
 
             ActorRef estadoCuentaActorRef = actorSystem.actorOf(
                     FromConfig.getInstance().props(Props.create(EstadoCuentaActor.class, context)),
@@ -98,13 +103,18 @@ public class Aplicacion {
             ActorRef integradorConsumidorActorRef = actorSystem.actorOf(
                     FromConfig.getInstance().props(Props.create(IntegradorEsperadaActor.class, context)),
                     "integradorEsperadaActor");
+            
+            
+            ActorRef integradorConsumidorPullActorRef = actorSystem.actorOf(
+                    FromConfig.getInstance().props(Props.create(IntegradorEsperadaPullActor.class, coordinadorIntegradorActor, context)),
+                    "integradorEsperadaPullActor");
 /*
             IntegradorEsperadaConsumidor.activarConsumidor(context.getBean(AmqpConnectionDetails.class),
                     integradorConsumidorActorRef, materializer,
                     context.getBean(VariablesEntorno.class).getValor("broker.queue.integrador.estado.cuenta"));
 
             actorSystem.actorOf(Props.create(ReprocesoCompletadoProductor.class, context), "reprocesoCompletadoProductor");*/
-        }
+       // }
 
         // Solo cuando el nodo se haya unido al cluster, se inician otros
         // actores.
@@ -117,7 +127,7 @@ public class Aplicacion {
             }
         });*/
         
-        try {
+        /*try {
             ejecutarIntegrador();
             TimeUnit.SECONDS.sleep(30);
             context.close();
@@ -127,7 +137,7 @@ public class Aplicacion {
             // el proceso.
             LOG.error(e.getMessage(), e);
             System.exit(0);
-        }
+        }*/
 
     }
 
@@ -143,26 +153,7 @@ public class Aplicacion {
     
     private static void ejecutarIntegrador() throws ParseException {
         System.out.println("---> buscando mensajes integrador...");
-        gestionDeCambiosServicio.tramitarCambiosEstadoCuenta();
-        //gestionDeCambiosServicio.procesarCambiosEstadoCuentaMasivo();
-        /*SimpleDateFormat formatter = new SimpleDateFormat("yyyy-MM-dd");
-        Date startDate = formatter.parse("2016-01-01");
-        Date endDate = formatter.parse("2019-07-01");
-
-        LocalDate start = startDate.toInstant().atZone(ZoneId.systemDefault()).toLocalDate();
-        LocalDate end = endDate.toInstant().atZone(ZoneId.systemDefault()).toLocalDate();
-
-        for (LocalDate date = start; date.isBefore(end); date = date.plusMonths(1)) {
-            String periodo = date.format(DateTimeFormatter.ofPattern("MMyyyy"));
-            
-            System.out.println("---> buscando formularios unicos para periodo:"+ periodo +"....");
-            List<Long> formularios = legalizacionDao.obtenerFormulariosMigracion(periodo);
-            System.out.println("---> formularios encontrados:"+formularios.size()+" para periodo:"+ periodo);
-            formularios.forEach(r->{
-                System.out.println("---> Procesando formulario:"+r);
-                reprocesoCargaServicio.ejecutar(r);
-            });
-        }*/
+        gestionDeCambiosServicio.procesarCambiosEstadoCuentaMasivo();
     }
 
 }

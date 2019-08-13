@@ -2949,7 +2949,7 @@ SELECT N.NPOLIZA,
     <entry key="reproceso.marcar.cambios.estado.cuenta">
         <![CDATA[  
         UPDATE
-            TCPG_INTEGRA_ESTADO_CTA
+            TCPG_INTEGRA_ESTADO_CTA_TEMP
         SET
             CDESTADO = :estado,
             FEMODIFICA = SYSDATE,
@@ -2974,7 +2974,7 @@ SELECT N.NPOLIZA,
     
     <entry key="cambios.estado.cuenta.cdfuente">
         <![CDATA[  
-            select CDFUENTE from  TCPG_INTEGRA_ESTADO_CTA  where NMCONSECUTIVO = :consecutivo
+            select CDFUENTE from  TCPG_INTEGRA_ESTADO_CTA_TEMP  where NMCONSECUTIVO = :consecutivo
         ]]>
     </entry>
     

@@ -26,10 +26,10 @@
 		<appender-ref ref="STDOUT" />
 	</appender>
 
-	<logger name="com.sura.arl" level="debug" additivity="false">
+	<!-- <logger name="com.sura.arl" level="debug" additivity="false">
 		<appender-ref ref="STDOUT_ASYNC" />
 		<appender-ref ref="suraLogger" />
-	</logger>
+	</logger> -->
 
 	<logger name="akka" level="info" additivity="false">
 		<appender-ref ref="suraLogger" />
@@ -60,5 +60,9 @@
 	<logger name="ch.qos.logback" level="off" additivity="false">
 		<appender-ref ref="suraLogger" />
 	</logger>
+	
+	<logger name="com.sura.arl.reproceso.actores.integrador" level="info" additivity="false" >
+        <appender-ref ref="STDOUT_ASYNC" />
+    </logger>
 
 </configuration>
